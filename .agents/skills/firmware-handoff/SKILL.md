@@ -6,7 +6,7 @@ description: Final checks and human handoff for completed firmware/build changes
 # Firmware handoff
 
 Run after implementation and main-agent self-review, before calling a firmware
-change ready or making an approved local commit. The main agent owns the result;
+change ready or making a local commit. The main agent owns the result;
 reviewer output is evidence, not authority. This workflow has at most two review
 rounds per logical change, even when slot limits require dispatching in batches.
 
