@@ -16,9 +16,15 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
+#include "components/Win98Chrome.h"
 #include "fontIds.h"
 
 namespace {
+
+using win98::drawArrow;
+using win98::drawButton;
+using win98::drawRaised;
+using win98::drawSunken;
 
 constexpr const char* NOTES_DIR = "/notes";
 constexpr const char* TMP_SUFFIX = ".tmp";
@@ -59,42 +65,6 @@ std::string sanitizeFileName(const std::string& raw) {
   if (name.empty()) return name;
   if (!hasTxtExtension(name.c_str())) name += ".txt";
   return name;
-}
-
-// Win98 raised edge: white top-left, black bottom-right, dark grey inner shadow.
-void drawRaised(const GfxRenderer& r, int x, int y, int w, int h) {
-  r.drawLine(x, y, x + w - 2, y, false);
-  r.drawLine(x, y, x, y + h - 2, false);
-  r.drawLine(x, y + h - 1, x + w - 1, y + h - 1, true);
-  r.drawLine(x + w - 1, y, x + w - 1, y + h - 1, true);
-  r.fillRectDither(x + 1, y + h - 2, w - 2, 1, Color::DarkGray);
-  r.fillRectDither(x + w - 2, y + 1, 1, h - 2, Color::DarkGray);
-}
-
-// Sunken edge: the raised edge mirrored.
-void drawSunken(const GfxRenderer& r, int x, int y, int w, int h) {
-  r.fillRectDither(x, y, w - 1, 1, Color::DarkGray);
-  r.fillRectDither(x, y, 1, h - 1, Color::DarkGray);
-  r.drawLine(x + 1, y + 1, x + w - 3, y + 1, true);
-  r.drawLine(x + 1, y + 1, x + 1, y + h - 3, true);
-  r.drawLine(x, y + h - 1, x + w - 1, y + h - 1, false);
-  r.drawLine(x + w - 1, y, x + w - 1, y + h - 1, false);
-}
-
-// Button with a raised edge. The face stays white so the thumb and arrows
-// stand out from the grey scrollbar track on e-ink.
-void drawButton(const GfxRenderer& r, int x, int y, int w, int h) {
-  r.fillRect(x, y, w, h, false);
-  r.drawRect(x, y, w, h, true);
-  drawRaised(r, x + 1, y + 1, w - 2, h - 2);
-}
-
-// Small solid triangle pointing up or down, centred in a box.
-void drawArrow(const GfxRenderer& r, int cx, int cy, bool up) {
-  for (int i = 0; i < 5; ++i) {
-    const int half = up ? i : 4 - i;
-    r.drawLine(cx - half, cy - 2 + i, cx + half, cy - 2 + i, true);
-  }
 }
 
 const char* menuLabel(const int index) {
