@@ -944,7 +944,7 @@ void loop() {
     screenshotComboActive = false;
   }
 
-  if (mappedInputManager.powerSleepClick()) {
+  if (mappedInputManager.powerSleepClick() || activityManager.takeSleepRequest()) {
     enterDeepSleep();
     return;
   }

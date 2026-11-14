@@ -121,7 +121,7 @@ The Home screen is the main entry point to the firmware. It looks like a Windows
 
 You can also move the selection with **Up** and **Down** and open it with **Confirm**. **Back** resumes the most recent book.
 
-Tap **Start** on the taskbar to open the same list as a menu (without the book). Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.
+Tap **Start** on the taskbar to open the same list as a menu (without the book), followed by **Shut Down**, which puts the device to sleep the same way the Power button does. Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.
 
 ### 3.2 Reading Mode
 

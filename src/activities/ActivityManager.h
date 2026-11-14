@@ -67,6 +67,9 @@ class ActivityManager {
   // This variable must only be set by the main loop, to avoid race conditions
   std::atomic<bool> requestedUpdate{false};
 
+  // Set by an activity loop, taken by main loop() before the next activity loop.
+  std::atomic<bool> sleepRequested{false};
+
   // Counts screen changes, so the Bluetooth page turner can tell one visit of a book from the next.
   // Written by the main loop under RenderLock; the render task captures it under that lock.
   uint32_t screenVisit = 0;
@@ -118,6 +121,9 @@ class ActivityManager {
   bool remoteClick(RemoteButton button);
   // Home is in front and has painted a frame of its own (not one left from the screen before).
   bool isForegroundHomeShown() const;
+  // Asks the main loop to enter deep sleep, as a power-button click does.
+  void requestSleep() { sleepRequested.store(true); }
+  bool takeSleepRequest() { return sleepRequested.exchange(false); }
   uint32_t visit() const { return screenVisit; }
   bool remoteTurn(bool forward, bool chapter);
   // A remote button mapped to the reader menu (true) or to a new clipping (false).

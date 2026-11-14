@@ -43,6 +43,7 @@ constexpr int TASKBAR_BUTTON_H = 36;
 
 constexpr int MENU_W = 380;
 constexpr int MENU_ROW_H = 52;
+constexpr int MENU_SEPARATOR_H = 10;
 constexpr int MENU_BANNER_W = 32;
 constexpr int MENU_BORDER = 3;
 
@@ -127,7 +128,10 @@ void Win98DesktopActivity::onEnter() {
   } else if (OPDS_STORE.hasServers()) {
     desktopItems.push_back({Action::Opds, BookIcon, tr(STR_OPDS_BROWSER)});
   }
-  menuItems = desktopItems;
+  menuItems.clear();
+  menuItems.reserve(desktopItems.size() + 1);
+  menuItems.assign(desktopItems.begin(), desktopItems.end());
+  menuItems.push_back({Action::ShutDown, nullptr, tr(STR_W98_SHUT_DOWN)});
 
   resumePath.clear();
   for (const RecentBook& book : RECENT_BOOKS.getBooks()) {
@@ -192,14 +196,17 @@ Win98DesktopActivity::Box Win98DesktopActivity::startButton() const {
 }
 
 Win98DesktopActivity::Box Win98DesktopActivity::startMenu() const {
-  const int h = static_cast<int>(menuItems.size()) * MENU_ROW_H + 2 * MENU_BORDER;
+  const int h = static_cast<int>(menuItems.size()) * MENU_ROW_H + MENU_SEPARATOR_H + 2 * MENU_BORDER;
   return {2, taskbarTop() + 2 - h, MENU_W, h};
 }
 
 Win98DesktopActivity::Box Win98DesktopActivity::menuRow(const int index) const {
   const Box m = startMenu();
   const int x = m.x + MENU_BORDER + MENU_BANNER_W;
-  return {x, m.y + MENU_BORDER + index * MENU_ROW_H, m.x + m.w - MENU_BORDER - x, MENU_ROW_H};
+  // Shut Down is last, below a separator.
+  const bool last = index == static_cast<int>(menuItems.size()) - 1;
+  const int y = m.y + MENU_BORDER + index * MENU_ROW_H + (last ? MENU_SEPARATOR_H : 0);
+  return {x, y, m.x + m.w - MENU_BORDER - x, MENU_ROW_H};
 }
 
 void Win98DesktopActivity::loop() {
@@ -308,6 +315,9 @@ void Win98DesktopActivity::activate(const Action action) {
     case Action::Opds:
       activityManager.goToBrowser();
       break;
+    case Action::ShutDown:
+      activityManager.requestSleep();
+      break;
   }
 }
 
@@ -344,7 +354,8 @@ void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {
     const Item& item = desktopItems[i];
     drawIconScaled(renderer, item.icon, c.x + (c.w - iconSize) / 2, c.y + 4, ICON_SCALE, true, true);
 
-    // Label on a white (selected: black) box, wrapped to two lines like Win98.
+    // Label drawn straight on the desktop; the selected one sits on a black
+    // box. Wrapped to two lines like Win98.
     const bool sel = i == selectedIndex;
     const auto lines = renderer.wrappedText(UI_10_FONT_ID, item.label.c_str(), c.w - 2 * LABEL_PAD - 2, 2);
     int ly = c.y + 4 + iconSize + 4;
@@ -352,7 +363,7 @@ void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {
       const int tw = renderer.getTextWidth(UI_10_FONT_ID, line.c_str());
       const int bw = tw + 2 * LABEL_PAD;
       const int bx = c.x + (c.w - bw) / 2;
-      renderer.fillRect(bx, ly, bw, lineH, sel);
+      if (sel) renderer.fillRect(bx, ly, bw, lineH, true);
       renderer.drawText(UI_10_FONT_ID, bx + LABEL_PAD, ly, line.c_str(), !sel);
       ly += lineH;
     }
@@ -410,12 +421,20 @@ void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
   const char* banner = tr(STR_W98_BANNER);
   renderer.drawTextRotated90CW(UI_12_FONT_ID, bx + 4, by + bh - 8, banner, false, EpdFontFamily::BOLD);
 
+  // Separator above Shut Down: a dark line over a white one.
+  const Box last = menuRow(static_cast<int>(menuItems.size()) - 1);
+  const int sepY = last.y - MENU_SEPARATOR_H / 2 - 1;
+  renderer.drawLine(last.x + 4, sepY, last.x + last.w - 5, sepY, true);
+  renderer.drawLine(last.x + 4, sepY + 1, last.x + last.w - 5, sepY + 1, false);
+
   const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
   for (int i = 0; i < static_cast<int>(menuItems.size()); ++i) {
     const Box row = menuRow(i);
     const bool sel = i == selectedIndex;
     if (sel) renderer.fillRect(row.x, row.y, row.w, row.h, true);
-    drawIconScaled(renderer, menuItems[i].icon, row.x + 8, row.y + (row.h - ICON) / 2, 1, !sel, !sel);
+    if (menuItems[i].icon) {
+      drawIconScaled(renderer, menuItems[i].icon, row.x + 8, row.y + (row.h - ICON) / 2, 1, !sel, !sel);
+    }
     const int textX = row.x + 8 + ICON + 12;
     const std::string label =
         renderer.truncatedText(UI_12_FONT_ID, menuItems[i].label.c_str(), row.x + row.w - 8 - textX);

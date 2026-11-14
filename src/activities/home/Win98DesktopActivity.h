@@ -25,11 +25,11 @@ class Win98DesktopActivity final : public Activity {
   bool isHomeActivity() const override { return true; }
 
  private:
-  enum class Action : uint8_t { Resume, Files, Library, Notepad, Transfer, Settings, Plugins, Opds };
+  enum class Action : uint8_t { Resume, Files, Library, Notepad, Transfer, Settings, Plugins, Opds, ShutDown };
 
   struct Item {
     Action action;
-    const uint8_t* icon;
+    const uint8_t* icon;  // null: no icon
     std::string label;
   };
 
@@ -47,7 +47,7 @@ class Win98DesktopActivity final : public Activity {
 
   // Built in onEnter, read-only afterwards.
   std::vector<Item> desktopItems;  // grid order; the recent book comes last
-  std::vector<Item> menuItems;     // Start menu: the desktop items without the book
+  std::vector<Item> menuItems;     // Start menu: desktop items without the book, then Shut Down
   std::string resumePath;          // most recent book, empty if none
 
   // Written by loop(), read by render().

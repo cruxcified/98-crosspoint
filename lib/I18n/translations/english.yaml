@@ -683,6 +683,7 @@ STR_W98_NETWORK: "Network Neighborhood"
 STR_W98_CONTROL_PANEL: "Control Panel"
 STR_W98_START: "Start"
 STR_W98_BANNER: "CrossPoint 98"
+STR_W98_SHUT_DOWN: "Shut Down"
 
 STR_NOTEPAD_TITLE: "Notepad"
 STR_NOTEPAD_UNTITLED: "Untitled"
