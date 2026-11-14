@@ -32,7 +32,7 @@ namespace {
 // icon grid starts below it.
 constexpr int DESKTOP_TOP = 52;
 constexpr int CELL_W = 160;
-constexpr int CELL_H = 124;
+constexpr int CELL_H = 136;
 constexpr int ICON = 32;       // source icon size
 constexpr int ICON_SCALE = 2;  // desktop icons are drawn at 64 px
 constexpr int LABEL_PAD = 3;
