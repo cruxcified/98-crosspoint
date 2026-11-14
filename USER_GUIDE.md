@@ -109,7 +109,19 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
+The Home screen is the main entry point to the firmware. It looks like a Windows 98 desktop. Tap an icon to open it:
+
+* **My Computer** opens **[Browse Files](#33-browse-files-screen)**.
+* **My Books** opens the **[Library](#34-library-screen)**.
+* **Notepad** opens the Notepad app (notes are saved in `/notes`).
+* **Network Neighborhood** opens **[File Transfer](#35-file-transfer-screen)**.
+* **Control Panel** opens **[Settings](#36-settings)**.
+* **Plugins** or **OPDS Browser** appears when enabled.
+* The most recently read book appears as the last icon and opens **[Reading Mode](#4-reading-mode)**.
+
+You can also move the selection with **Up** and **Down** and open it with **Confirm**. **Back** resumes the most recent book.
+
+Tap **Start** on the taskbar to open the same list as a menu (without the book). Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.
 
 ### 3.2 Reading Mode
 
@@ -255,7 +267,9 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   
   - "Classic" - The original Crosspoint theme
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
-  - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
+  - "Lyra Extended" - Lyra, but showed 3 books instead of 1 on the old Home screen
+  
+  The theme styles menus and lists. It does not change the Windows 98 **[Home Screen](#31-home-screen)**.
   - "RoundedRaff" - A rounded theme with additional visual styling
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
