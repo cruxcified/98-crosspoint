@@ -78,6 +78,10 @@ python fontconvert.py ubuntu_8_regular 8 \
   ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-Regular.ttf \
   --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/ubuntu_8_regular.h
 
+# Win98 desktop face: a pixel font on a 100-unit grid (20.48 px/em), so size 10
+# (20.8 ppem at 150 DPI) keeps glyphs close to one device pixel per font pixel.
+python fontconvert.py vcr_10_regular 10 ../builtinFonts/source/VCROSDMono/VCR_OSD_Mono.ttf > ../builtinFonts/vcr_10_regular.h
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/

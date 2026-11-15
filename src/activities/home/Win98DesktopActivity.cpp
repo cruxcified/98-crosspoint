@@ -6,6 +6,7 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <I18n.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -48,6 +49,10 @@ constexpr int MENU_BANNER_W = 32;
 constexpr int MENU_BORDER = 3;
 
 constexpr unsigned long CLOCK_CHECK_MS = 5000;
+
+// VCR OSD Mono pixel font for desktop text. It covers only ASCII and part of
+// Latin-1, so other text (book titles, translations) uses the UI font.
+constexpr int DESKTOP_FONT = VCR_10_FONT_ID;
 
 // Icons are 1-bpp, MSB first, 0 = ink, stored rotated as GfxRenderer::drawIcon
 // expects: screen pixel (sx, sy) is row 31 - sx, column sy.
@@ -103,6 +108,17 @@ void drawLogo(const GfxRenderer& r, const int x, const int y) {
   r.fillRectDither(x + 10, y, 8, 8, Color::DarkGray);
   r.fillRectDither(x, y + 10, 8, 8, Color::DarkGray);
   r.fillRect(x + 10, y + 10, 8, 8, true);
+}
+
+int fontFor(const GfxRenderer& r, const char* text) {
+  const auto it = r.getFontMap().find(DESKTOP_FONT);
+  if (it == r.getFontMap().end()) return UI_10_FONT_ID;
+  const auto* cursor = reinterpret_cast<const unsigned char*>(text);
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(&cursor))) {
+    if (!it->second.hasCodepoint(cp)) return UI_10_FONT_ID;
+  }
+  return DESKTOP_FONT;
 }
 
 bool formatClock(char* buf, const size_t size) {
@@ -347,7 +363,6 @@ void Win98DesktopActivity::render(RenderLock&&) {
 void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {
   renderer.fillRectDither(0, 0, renderer.getScreenWidth(), taskbarTop(), Color::LightGray);
 
-  const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
   const int iconSize = ICON * ICON_SCALE;
   for (int i = 0; i < visibleIconCount(); ++i) {
     const Box c = iconCell(i);
@@ -357,14 +372,16 @@ void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {
     // Label drawn straight on the desktop; the selected one sits on a black
     // box. Wrapped to two lines like Win98.
     const bool sel = i == selectedIndex;
-    const auto lines = renderer.wrappedText(UI_10_FONT_ID, item.label.c_str(), c.w - 2 * LABEL_PAD - 2, 2);
+    const int font = fontFor(renderer, item.label.c_str());
+    const int lineH = renderer.getLineHeight(font);
+    const auto lines = renderer.wrappedText(font, item.label.c_str(), c.w - 2 * LABEL_PAD - 2, 2);
     int ly = c.y + 4 + iconSize + 4;
     for (const std::string& line : lines) {
-      const int tw = renderer.getTextWidth(UI_10_FONT_ID, line.c_str());
+      const int tw = renderer.getTextWidth(font, line.c_str());
       const int bw = tw + 2 * LABEL_PAD;
       const int bx = c.x + (c.w - bw) / 2;
       if (sel) renderer.fillRect(bx, ly, bw, lineH, true);
-      renderer.drawText(UI_10_FONT_ID, bx + LABEL_PAD, ly, line.c_str(), !sel);
+      renderer.drawText(font, bx + LABEL_PAD, ly, line.c_str(), !sel);
       ly += lineH;
     }
   }
@@ -388,9 +405,10 @@ void Win98DesktopActivity::drawTaskbar(const bool startPressed) {
   }
   const int press = startPressed ? 1 : 0;
   drawLogo(renderer, s.x + 10 + press, s.y + (s.h - 18) / 2 + press);
-  const int textH = renderer.getLineHeight(UI_12_FONT_ID);
-  renderer.drawText(UI_12_FONT_ID, s.x + 36 + press, s.y + (s.h - textH) / 2 + press, tr(STR_W98_START), true,
-                    EpdFontFamily::BOLD);
+  const char* start = tr(STR_W98_START);
+  const int startFont = fontFor(renderer, start);
+  const int textH = renderer.getLineHeight(startFont);
+  renderer.drawText(startFont, s.x + 36 + press, s.y + (s.h - textH) / 2 + press, start, true);
 
   // Tray: battery and clock in a sunken white box.
   char clock[sizeof(shownClock)] = {};
@@ -398,13 +416,13 @@ void Win98DesktopActivity::drawTaskbar(const bool startPressed) {
   memcpy(shownClock, clock, sizeof(shownClock));
   char tray[32];
   snprintf(tray, sizeof(tray), clock[0] ? "%u%%   %s" : "%u%%", powerManager.getBatteryPercentage(), clock);
-  const int trayTextW = renderer.getTextWidth(UI_10_FONT_ID, tray);
+  const int trayTextW = renderer.getTextWidth(DESKTOP_FONT, tray);
   const int trayW = trayTextW + 24;
   const int trayX = width - 4 - trayW;
   renderer.fillRect(trayX, s.y, trayW, s.h, false);
   win98::drawSunken(renderer, trayX, s.y, trayW, s.h);
-  const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
-  renderer.drawText(UI_10_FONT_ID, trayX + 12, s.y + (s.h - lineH) / 2, tray, true);
+  const int lineH = renderer.getLineHeight(DESKTOP_FONT);
+  renderer.drawText(DESKTOP_FONT, trayX + 12, s.y + (s.h - lineH) / 2, tray, true);
 }
 
 void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
@@ -419,7 +437,7 @@ void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
   const int bh = m.h - 2 * MENU_BORDER;
   renderer.fillRect(bx, by, MENU_BANNER_W, bh, true);
   const char* banner = tr(STR_W98_BANNER);
-  renderer.drawTextRotated90CW(UI_12_FONT_ID, bx + 4, by + bh - 8, banner, false, EpdFontFamily::BOLD);
+  renderer.drawTextRotated90CW(fontFor(renderer, banner), bx + 4, by + bh - 8, banner, false);
 
   // Separator above Shut Down: a dark line over a white one.
   const Box last = menuRow(static_cast<int>(menuItems.size()) - 1);
@@ -427,7 +445,6 @@ void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
   renderer.drawLine(last.x + 4, sepY, last.x + last.w - 5, sepY, true);
   renderer.drawLine(last.x + 4, sepY + 1, last.x + last.w - 5, sepY + 1, false);
 
-  const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
   for (int i = 0; i < static_cast<int>(menuItems.size()); ++i) {
     const Box row = menuRow(i);
     const bool sel = i == selectedIndex;
@@ -436,8 +453,9 @@ void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
       drawIconScaled(renderer, menuItems[i].icon, row.x + 8, row.y + (row.h - ICON) / 2, 1, !sel, !sel);
     }
     const int textX = row.x + 8 + ICON + 12;
-    const std::string label =
-        renderer.truncatedText(UI_12_FONT_ID, menuItems[i].label.c_str(), row.x + row.w - 8 - textX);
-    renderer.drawText(UI_12_FONT_ID, textX, row.y + (row.h - lineH) / 2, label.c_str(), !sel);
+    const int font = fontFor(renderer, menuItems[i].label.c_str());
+    const int lineH = renderer.getLineHeight(font);
+    const std::string label = renderer.truncatedText(font, menuItems[i].label.c_str(), row.x + row.w - 8 - textX);
+    renderer.drawText(font, textX, row.y + (row.h - lineH) / 2, label.c_str(), !sel);
   }
 }
