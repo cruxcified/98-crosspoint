@@ -732,7 +732,6 @@ void setup() {
                             : isPersistedSleepWake ? BootResume::SplashlessWake
                                                    : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
-  bool needsWakeRefresh = false;
 
   setupDisplayAndFonts(resume != BootResume::Splash);
 
@@ -754,10 +753,9 @@ void setup() {
           renderer.cleanupGrayscaleWithFrameBuffer();
           allowFastInitialReaderRefresh = true;
         }
-      } else {
-        // Clean the retained sleep image as part of the first Home paint.
-        needsWakeRefresh = true;
       }
+      // The desktop's first frame is always a half refresh, which cleans the
+      // retained sleep image.
       break;
     case BootResume::Splash:
       activityManager.goToBoot();
@@ -793,7 +791,7 @@ void setup() {
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
     // crashed (indicated by readerActivityLoadCount > 0)
-    activityManager.goHome(HomeMenuItem::NONE, needsWakeRefresh);
+    activityManager.goHome();
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
