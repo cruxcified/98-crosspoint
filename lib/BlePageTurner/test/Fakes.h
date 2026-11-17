@@ -72,6 +72,7 @@ struct HostState {
   // The render lock is held by someone else: releaseCaches fails while true.
   bool renderBusy = false;
   std::vector<bleturner::Action> delivered;
+  std::string typed;  // Char keys as their char, Enter as '\n', Backspace as '\b'
   bool deliverResult = true;
   bool yieldResult = true;
   unsigned yields = 0;

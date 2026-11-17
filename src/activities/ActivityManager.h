@@ -118,6 +118,9 @@ class ActivityManager {
   // a page or chapter turn from a remote. False when no book in front took the turn.
   bool isForegroundReader() const;
   bool isRemoteReaderContext() const;
+  // A text screen (Notepad) is in front and takes Bluetooth keyboard input.
+  bool isTypingContext() const;
+  bool typeKey(char ch);
   bool remoteClick(RemoteButton button);
   // Home is in front and has painted a frame of its own (not one left from the screen before).
   bool isForegroundHomeShown() const;

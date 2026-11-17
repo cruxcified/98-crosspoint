@@ -8,7 +8,8 @@
 #include "components/OptionPopup.h"
 
 // Win98-style Notepad: opens or creates a .txt file in /notes, appends lines
-// typed on the on-screen keyboard, and saves. Drawn directly with GfxRenderer
+// typed on the on-screen keyboard or types at the end with a Bluetooth
+// keyboard, and saves. Drawn directly with GfxRenderer
 // (title bar, File menu, sunken text box, scrollbar); touch hit tests use the
 // same layout() as render().
 class NotepadActivity final : public Activity {
@@ -22,6 +23,8 @@ class NotepadActivity final : public Activity {
   void render(RenderLock&&) override;
   void prepareForSleep() override;
   bool handleHomeGesture() override;
+  bool acceptsTypedInput() const override { return true; }
+  bool typeKey(char ch) override;
 
  private:
   struct Box {
@@ -67,6 +70,7 @@ class NotepadActivity final : public Activity {
   bool dirty = false;
   bool firstRender = true;
   bool buffersReady = false;
+  bool shownKeyboardLinked = false;  // loop-side: keyboard state the last request showed
 
   // Wrapped line start offsets into `text`, rebuilt on the loop side whenever
   // the text changes; render() only reads them.
@@ -83,8 +87,10 @@ class NotepadActivity final : public Activity {
   std::string statusMessage;
 
   Layout layout() const;
-  bool rewrap(int width);  // false when the note needs more than MAX_LINES
-  bool rewrapToLayout();
+  // Rewraps from the line before `changedAt`; earlier lines keep their breaks.
+  // False when the note needs more than MAX_LINES.
+  bool rewrap(int width, size_t changedAt = 0);
+  bool rewrapToLayout(size_t changedAt = 0);
   int measure(size_t start, size_t end);
   size_t codePointStart(size_t pos) const;
   size_t nextBreak(size_t start, int maxWidth);

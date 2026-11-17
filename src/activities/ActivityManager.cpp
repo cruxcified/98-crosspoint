@@ -154,7 +154,8 @@ void ActivityManager::loop() {
     // The page turner's radio gives its heap back before the next screen allocates. Its teardown
     // can span loop passes and runs outside the render lock.
     if (pendingAction != PendingAction::ReplaceForSleep &&
-        !bleturner::beforeScreenChange(0, pendingActivity && pendingActivity->isReaderActivity())) {
+        !bleturner::beforeScreenChange(
+            0, pendingActivity && (pendingActivity->isReaderActivity() || pendingActivity->acceptsTypedInput()))) {
       return;
     }
     if (pendingAction == PendingAction::Pop) {
@@ -424,6 +425,12 @@ bool ActivityManager::isForegroundReader() const {
 bool ActivityManager::isRemoteReaderContext() const {
   return pendingAction == PendingAction::None && currentActivity && currentActivity->acceptsRemoteInput();
 }
+
+bool ActivityManager::isTypingContext() const {
+  return pendingAction == PendingAction::None && currentActivity && currentActivity->acceptsTypedInput();
+}
+
+bool ActivityManager::typeKey(const char ch) { return isTypingContext() && currentActivity->typeKey(ch); }
 
 bool ActivityManager::remoteClick(const RemoteButton button) {
   if (!isRemoteReaderContext() || RenderLock::peek() || requestedUpdate.load()) return false;

@@ -1,5 +1,6 @@
 #include "NotepadActivity.h"
 
+#include <BlePageTurner.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
@@ -73,6 +74,10 @@ const char* menuLabel(const int index) {
   return I18N.get(labels[index]);
 }
 
+}  // namespace
+
+namespace {
+bool keyboardLinked() { return bleturner::status().connected; }
 }  // namespace
 
 void NotepadActivity::onEnter() {
@@ -234,10 +239,15 @@ size_t NotepadActivity::nextBreak(const size_t start, const int maxWidth) {
   return lineEnd;
 }
 
-bool NotepadActivity::rewrap(const int width) {
-  lineStarts.clear();
-  size_t pos = 0;
-  lineStarts.push_back(0);
+bool NotepadActivity::rewrap(const int width, const size_t changedAt) {
+  // Typing joins or splits a word only at the change. That can move the
+  // breaks of the two lines before it (a hard-cut word), so wrapping restarts
+  // two lines earlier.
+  size_t keep = 0;  // the line holding changedAt
+  while (keep + 1 < lineStarts.size() && lineStarts[keep + 1] <= changedAt) ++keep;
+  keep = keep > 2 ? keep - 2 : 0;
+  lineStarts.resize(keep + 1);  // line 0 always starts at 0
+  size_t pos = lineStarts[keep];
   while (pos < text.size()) {
     const size_t end = nextBreak(pos, width);
     if (end < text.size() && text[end] == '\n') {
@@ -281,6 +291,11 @@ void NotepadActivity::loop() {
   // render() reads the note on the render task; every change below happens
   // under the same lock. Nothing here waits for a render.
   RenderLock lock;
+  // Show the caret and status as soon as a Bluetooth keyboard links or drops.
+  if (keyboardLinked() != shownKeyboardLinked) {
+    shownKeyboardLinked = !shownKeyboardLinked;
+    requestUpdate();
+  }
   if (popup.isActive()) {
     popup.handleInput(mappedInput, [this] { requestUpdate(); });
     return;
@@ -429,6 +444,40 @@ void NotepadActivity::startTyping() {
                          });
 }
 
+bool NotepadActivity::typeKey(const char ch) {
+  RenderLock lock;
+  if (!buffersReady || popup.isActive() || menuOpen) return false;
+  statusMessage.clear();
+  const size_t oldSize = text.size();
+  if (ch == '\b') {
+    if (text.empty()) return true;
+    size_t cut = codePointStart(text.size() - 1);
+    if (cut > 0 && text[cut] == '\n' && text[cut - 1] == '\r') --cut;
+    text.resize(cut);
+  } else {
+    if (oldSize + 2 > MAX_FILE_BYTES) {
+      showMessage(tr(STR_NOTEPAD_TITLE), tr(STR_NOTEPAD_TOO_LARGE));
+      return true;
+    }
+    if (ch != '\n') {
+      text += ch;
+    } else {
+      // Match the file's existing line endings (Windows notes use CRLF).
+      text += text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    }
+  }
+  followEnd = true;
+  if (!rewrapToLayout(std::min(oldSize, text.size()))) {
+    text.resize(oldSize);
+    rewrapToLayout();
+    showMessage(tr(STR_NOTEPAD_TITLE), tr(STR_NOTEPAD_TOO_LARGE));
+    return true;
+  }
+  dirty = true;
+  requestUpdate();
+  return true;
+}
+
 void NotepadActivity::appendLine(const std::string& line) {
   if (line.empty()) return;
   // Match the file's existing line endings (Windows notes use CRLF).
@@ -447,9 +496,9 @@ void NotepadActivity::appendLine(const std::string& line) {
   dirty = true;
 }
 
-bool NotepadActivity::rewrapToLayout() {
+bool NotepadActivity::rewrapToLayout(const size_t changedAt) {
   const Layout l = layout();
-  const bool ok = rewrap(l.textArea.w);
+  const bool ok = rewrap(l.textArea.w, changedAt);
   clampScroll(l);
   return ok;
 }
@@ -715,6 +764,12 @@ void NotepadActivity::drawText(const Layout& l) const {
     line.assign(text, start, end - start);
     renderer.drawText(UI_12_FONT_ID, l.textArea.x, l.textArea.y + (i - topLine) * l.lineHeight, line.c_str());
   }
+  // With a keyboard linked, a caret marks where typing goes: the end of the note.
+  if (keyboardLinked() && last == total && last > topLine) {
+    const int x = l.textArea.x + renderer.getTextAdvanceX(UI_12_FONT_ID, line.c_str(), EpdFontFamily::REGULAR) + 1;
+    renderer.fillRect(std::min(x, l.textArea.x + l.textArea.w - 2), l.textArea.y + (last - 1 - topLine) * l.lineHeight,
+                      2, l.lineHeight, true);
+  }
 }
 
 void NotepadActivity::drawScrollBar(const Layout& l) const {
@@ -744,6 +799,7 @@ void NotepadActivity::drawStatusBar(const Layout& l) const {
   std::string status = statusMessage;
   if (status.empty()) status = path.empty() ? tr(STR_NOTEPAD_NOT_SAVED) : path;
   if (dirty) status = std::string(tr(STR_NOTEPAD_MODIFIED)) + "  |  " + status;
+  if (keyboardLinked()) status = std::string(tr(STR_NOTEPAD_KEYBOARD)) + "  |  " + status;
   const int y = s.y + (s.h - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
   const std::string fitted = renderer.truncatedText(UI_10_FONT_ID, status.c_str(), s.w - 12);
   renderer.drawText(UI_10_FONT_ID, s.x + 6, y, fitted.c_str());
