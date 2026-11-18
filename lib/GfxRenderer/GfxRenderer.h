@@ -245,9 +245,10 @@ class GfxRenderer {
   static HalDisplay::RefreshMode strongerRefresh(const HalDisplay::RefreshMode a, const HalDisplay::RefreshMode b) {
     return a < b ? a : b;
   }
+  // Two promotions before a refresh keep the stronger one.
   void promoteNextRefresh(const HalDisplay::RefreshMode mode) const {
+    promotedRefresh_ = promotedRefreshPending_ ? strongerRefresh(promotedRefresh_, mode) : mode;
     promotedRefreshPending_ = true;
-    promotedRefresh_ = mode;
   }
   // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
   // grayscale strip rendering) can overlap the panel's refresh time. The

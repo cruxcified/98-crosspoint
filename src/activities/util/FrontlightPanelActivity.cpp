@@ -106,6 +106,10 @@ void FrontlightPanelActivity::persistLightSettings() {
 void FrontlightPanelActivity::onExit() {
   persistLightSettings();
   Activity::onExit();
+  // Fast refreshes leave a ghost of the panel on the screen underneath; its
+  // repaint wipes it with the half refresh. A stronger promotion (the refresh
+  // tile's FULL) still wins.
+  renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
 }
 
 void FrontlightPanelActivity::onBrightnessEvent(const fui::ActionEvent& event, void* user) {
@@ -447,6 +451,9 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   // flip the whole frame's polarity without the FULL waveform's blackout
   // flash. Any faint residue clears with the panel's dedicated refresh tile
   // or the next scheduled clean refresh.
-  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  // The first frame also takes HALF, so the screen underneath does not ghost
+  // through the panel.
+  renderer.displayBuffer(cleanRefreshPending || !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   cleanRefreshPending = false;
+  firstRenderDone = true;
 }
