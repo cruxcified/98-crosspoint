@@ -101,6 +101,7 @@ RadioInputs inputsFor(const Phase phase, const Scene& s) {
   in.heldForBuild = heldForBuild.load(std::memory_order_relaxed);
   in.idleStopped = radioIdleStopped.load(std::memory_order_relaxed);
   in.hasBond = config->peerAddr[0] != '\0';
+  in.typing = s.typing;
   in.linked = true;
   return in;
 }

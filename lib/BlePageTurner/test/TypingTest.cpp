@@ -77,6 +77,20 @@ TEST_F(TypingTest, IgnoresKeysThatTypeNothing) {
   EXPECT_TRUE(host().delivered.empty());
 }
 
+TEST_F(TypingTest, RadioStaysUpWaitingForTheKeyboard) {
+  pass(notepad());
+  ASSERT_TRUE(radio().running);
+  radio().now += 2 * bleturner::kIdleOffMs;
+  pass(notepad());
+  EXPECT_TRUE(radio().running) << "a keyboard switched on later must still link";
+
+  pass(fake::reading());
+  radio().now += 2 * bleturner::kIdleOffMs;
+  pass(fake::reading());
+  pass(fake::reading());
+  EXPECT_FALSE(radio().running) << "a book still stops an idle radio";
+}
+
 TEST_F(TypingTest, TheSameKeysTurnPagesInABook) {
   pass(fake::reading());
   linkKeyboard();

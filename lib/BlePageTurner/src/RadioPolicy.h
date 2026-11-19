@@ -82,6 +82,7 @@ struct RadioInputs {
   Heap heap;
   bool connectionBusy = false;
   bool hasBond = false;  // a remote has been chosen (Config::peerAddr): a book or Home starts the radio only for one
+  bool typing = false;   // a text screen is in front (Scene::typing): it waits for its keyboard
 };
 
 // The ONE answer to "may the radio be on now". Everything that starts, keeps or stops the
@@ -132,8 +133,9 @@ constexpr Why radioVerdict(const RadioInputs& in, const Profile& profile = activ
     case Phase::Running:
       if (!in.enabled) return Why::Off;
       if (in.storageBusy) return Why::StorageBusy;
-      // A linked remote is never idle: it sits quiet between two presses for a long time.
-      if (!in.linked && !in.connectionBusy && in.idleMs >= kIdleOffMs) return Why::IdleNoLink;
+      // A linked remote is never idle: it sits quiet between two presses for a long time. A text
+      // screen keeps listening while it is open, so a keyboard switched on later still links.
+      if (!in.linked && !in.connectionBusy && !in.typing && in.idleMs >= kIdleOffMs) return Why::IdleNoLink;
       return Why::Ok;
   }
   return Why::Off;
