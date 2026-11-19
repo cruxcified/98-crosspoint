@@ -1,4 +1,6 @@
 #pragma once
+#include <atomic>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -9,7 +11,9 @@
 
 // Win98-style Notepad: opens or creates a .txt file in /notes, appends lines
 // typed on the on-screen keyboard or types at the end with a Bluetooth
-// keyboard, and saves. Drawn directly with GfxRenderer
+// keyboard, and saves. While a keyboard is linked it turns landscape, where a
+// typed line can be refreshed on its own (a short band of the panel's gate
+// rows) instead of the whole screen. Drawn directly with GfxRenderer
 // (title bar, File menu, sunken text box, scrollbar); touch hit tests use the
 // same layout() as render().
 class NotepadActivity final : public Activity {
@@ -25,6 +29,7 @@ class NotepadActivity final : public Activity {
   bool handleHomeGesture() override;
   bool acceptsTypedInput() const override { return true; }
   bool typeKey(char ch) override;
+  void requestUpdate(bool immediate = false) override;
 
  private:
   struct Box {
@@ -70,7 +75,15 @@ class NotepadActivity final : public Activity {
   bool dirty = false;
   bool firstRender = true;
   bool buffersReady = false;
-  bool shownKeyboardLinked = false;  // loop-side: keyboard state the last request showed
+  // Landscape while a Bluetooth keyboard is linked; loop-side, under the lock.
+  bool landscape = false;
+  // First wrapped line the next render may refresh on its own: typed keys
+  // that changed only lines from here down. FULL_REFRESH_LINE: any other change.
+  static constexpr int FULL_REFRESH_LINE = -1;
+  static constexpr int NO_PENDING_LINE = INT_MAX;
+  std::atomic<int> windowFromLine{FULL_REFRESH_LINE};
+  bool typedUpdate = false;   // typeKey's own requestUpdate keeps windowFromLine
+  size_t rewrapFromLine = 0;  // where the last rewrap restarted
 
   // Wrapped line start offsets into `text`, rebuilt on the loop side whenever
   // the text changes; render() only reads them.
@@ -91,6 +104,7 @@ class NotepadActivity final : public Activity {
   // False when the note needs more than MAX_LINES.
   bool rewrap(int width, size_t changedAt = 0);
   bool rewrapToLayout(size_t changedAt = 0);
+  void setLandscape(bool on);
   int measure(size_t start, size_t end);
   size_t codePointStart(size_t pos) const;
   size_t nextBreak(size_t start, int maxWidth);

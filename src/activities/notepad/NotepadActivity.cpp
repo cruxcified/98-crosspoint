@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "HapticFeedback.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -78,7 +79,27 @@ const char* menuLabel(const int index) {
 
 namespace {
 bool keyboardLinked() { return bleturner::status().connected; }
+
+// The landscape way the reading orientation setting names; clockwise otherwise.
+GfxRenderer::Orientation typingOrientation() {
+  return SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW ? GfxRenderer::Orientation::LandscapeCounterClockwise
+                                                                   : GfxRenderer::Orientation::LandscapeClockwise;
+}
 }  // namespace
+
+void NotepadActivity::requestUpdate(const bool immediate) {
+  if (!typedUpdate) windowFromLine.store(FULL_REFRESH_LINE);
+  Activity::requestUpdate(immediate);
+}
+
+void NotepadActivity::setLandscape(const bool on) {
+  landscape = on;
+  renderer.setOrientation(on ? typingOrientation() : GfxRenderer::Orientation::Portrait);
+  menuOpen = false;
+  followEnd = true;
+  if (buffersReady) rewrapToLayout();
+  firstRender = true;  // the whole frame turns: clean refresh
+}
 
 void NotepadActivity::onEnter() {
   Activity::onEnter();
@@ -111,6 +132,7 @@ void NotepadActivity::onEnter() {
 
 void NotepadActivity::onExit() {
   Activity::onExit();
+  if (landscape) setLandscape(false);
   popup.dismiss();
   // Leaving by any route (including Home while the keyboard is open) keeps
   // typed lines; "No" on the save prompt clears `dirty` first.
@@ -247,6 +269,7 @@ bool NotepadActivity::rewrap(const int width, const size_t changedAt) {
   while (keep + 1 < lineStarts.size() && lineStarts[keep + 1] <= changedAt) ++keep;
   keep = keep > 2 ? keep - 2 : 0;
   lineStarts.resize(keep + 1);  // line 0 always starts at 0
+  rewrapFromLine = keep;
   size_t pos = lineStarts[keep];
   while (pos < text.size()) {
     const size_t end = nextBreak(pos, width);
@@ -291,11 +314,6 @@ void NotepadActivity::loop() {
   // render() reads the note on the render task; every change below happens
   // under the same lock. Nothing here waits for a render.
   RenderLock lock;
-  // Show the caret and status as soon as a Bluetooth keyboard links or drops.
-  if (keyboardLinked() != shownKeyboardLinked) {
-    shownKeyboardLinked = !shownKeyboardLinked;
-    requestUpdate();
-  }
   if (popup.isActive()) {
     popup.handleInput(mappedInput, [this] { requestUpdate(); });
     return;
@@ -303,6 +321,13 @@ void NotepadActivity::loop() {
   if (!buffersReady) {
     // The out-of-memory message was dismissed without OK.
     activityManager.goHome();
+    return;
+  }
+
+  // Turn landscape as soon as a Bluetooth keyboard links, and back when it drops.
+  if (keyboardLinked() != landscape) {
+    setLandscape(!landscape);
+    requestUpdate();
     return;
   }
 
@@ -428,6 +453,9 @@ void NotepadActivity::activateMenuItem(const MenuItem item) {
 }
 
 void NotepadActivity::startTyping() {
+  // The linked keyboard types; a tap must not open the on-screen one, which
+  // would also drop the Bluetooth link.
+  if (landscape) return;
   // Room for the line plus up to two CRLF line endings.
   constexpr size_t EOL_RESERVE = 4;
   if (text.size() + EOL_RESERVE >= MAX_FILE_BYTES) {
@@ -447,6 +475,11 @@ void NotepadActivity::startTyping() {
 bool NotepadActivity::typeKey(const char ch) {
   RenderLock lock;
   if (!buffersReady || popup.isActive() || menuOpen) return false;
+  // Unchanged chrome (status bar, scroll position, scrollbar thumb) lets the
+  // render refresh only the changed lines.
+  const bool chromeSame = dirty && statusMessage.empty();
+  const int oldTop = topLine;
+  const size_t oldLines = lineStarts.size();
   statusMessage.clear();
   const size_t oldSize = text.size();
   if (ch == '\b') {
@@ -474,7 +507,17 @@ bool NotepadActivity::typeKey(const char ch) {
     return true;
   }
   dirty = true;
+  const int visible = layout().visibleLines;
+  const bool thumbSame = lineStarts.size() == oldLines || static_cast<int>(lineStarts.size()) <= visible;
+  const int pending = windowFromLine.load();
+  if (chromeSame && topLine == oldTop && thumbSame && pending != FULL_REFRESH_LINE) {
+    windowFromLine.store(std::min(pending, static_cast<int>(rewrapFromLine)));
+  } else {
+    windowFromLine.store(FULL_REFRESH_LINE);
+  }
+  typedUpdate = true;
   requestUpdate();
+  typedUpdate = false;
   return true;
 }
 
@@ -544,6 +587,8 @@ void NotepadActivity::saveOrPromptName(const AfterSave next) {
 }
 
 void NotepadActivity::promptFileName(const AfterSave next) {
+  // The on-screen keyboard is portrait only.
+  if (landscape) setLandscape(false);
   std::string initial = displayName();
   if (path.empty()) initial.clear();
   startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_NOTEPAD_FILE_NAME),
@@ -765,7 +810,7 @@ void NotepadActivity::drawText(const Layout& l) const {
     renderer.drawText(UI_12_FONT_ID, l.textArea.x, l.textArea.y + (i - topLine) * l.lineHeight, line.c_str());
   }
   // With a keyboard linked, a caret marks where typing goes: the end of the note.
-  if (keyboardLinked() && last == total && last > topLine) {
+  if (landscape && last == total && last > topLine) {
     const int x = l.textArea.x + renderer.getTextAdvanceX(UI_12_FONT_ID, line.c_str(), EpdFontFamily::REGULAR) + 1;
     renderer.fillRect(std::min(x, l.textArea.x + l.textArea.w - 2), l.textArea.y + (last - 1 - topLine) * l.lineHeight,
                       2, l.lineHeight, true);
@@ -799,7 +844,7 @@ void NotepadActivity::drawStatusBar(const Layout& l) const {
   std::string status = statusMessage;
   if (status.empty()) status = path.empty() ? tr(STR_NOTEPAD_NOT_SAVED) : path;
   if (dirty) status = std::string(tr(STR_NOTEPAD_MODIFIED)) + "  |  " + status;
-  if (keyboardLinked()) status = std::string(tr(STR_NOTEPAD_KEYBOARD)) + "  |  " + status;
+  if (landscape) status = std::string(tr(STR_NOTEPAD_KEYBOARD)) + "  |  " + status;
   const int y = s.y + (s.h - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
   const std::string fitted = renderer.truncatedText(UI_10_FONT_ID, status.c_str(), s.w - 12);
   renderer.drawText(UI_10_FONT_ID, s.x + 6, y, fitted.c_str());
@@ -847,6 +892,18 @@ void NotepadActivity::render(RenderLock&&) {
 
   if (popup.isActive()) {
     popup.render(renderer);
+  }
+  // Typed keys that changed only the lines from `from` down refresh just that
+  // band; one extra line clears a line a Backspace removed.
+  const int from = windowFromLine.exchange(NO_PENDING_LINE);
+  if (landscape && !firstRender && !menuOpen && !popup.isActive() && from >= topLine && from != NO_PENDING_LINE) {
+    const int lastLine = static_cast<int>(lineStarts.size()) + 1;
+    const int y0 = l.textArea.y + (from - topLine) * l.lineHeight;
+    const int y1 = std::min(l.textBox.y + l.textBox.h - 2, l.textArea.y + (lastLine - topLine) * l.lineHeight);
+    if (y1 > y0) {
+      renderer.displayWindow(l.textBox.x + 2, y0, l.scrollBar.x - l.textBox.x - 2, y1 - y0);
+      return;
+    }
   }
   renderer.displayBuffer(firstRender ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   firstRender = false;

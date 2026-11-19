@@ -58,6 +58,10 @@ class HalDisplay {
   // baseline before the next differential update (the tiled grayscale cleanup
   // does). Panels without deferral fall back to a blocking refresh.
   void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  // Fast refresh of one panel-memory rectangle (x and w multiples of 8). The
+  // X4 Pro scans only the window's gate rows, so a short band is quicker than a
+  // whole-panel refresh. Drivers without regional support refresh the panel.
+  void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
   // Block until a pending deferred refresh completes (no-op when none is).
   void waitRefreshComplete();
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
