@@ -78,9 +78,28 @@ python fontconvert.py ubuntu_8_regular 8 \
   ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-Regular.ttf \
   --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/ubuntu_8_regular.h
 
-# Win98 desktop face: a pixel font on a 100-unit grid (20.48 px/em), so size 10
-# (20.8 ppem at 150 DPI) keeps glyphs close to one device pixel per font pixel.
-python fontconvert.py vcr_10_regular 10 ../builtinFonts/source/VCROSDMono/VCR_OSD_Mono.ttf > ../builtinFonts/vcr_10_regular.h
+# Win98 UI face: VCR OSD Mono, a pixel font on a 100-unit grid (20.48 px/em).
+# Size 10 (20.8 ppem at 150 DPI) maps one font pixel to about one device
+# pixel; sizes 8 and 12 scale it unevenly. It fills the UI slots at the
+# Ubuntu sizes, with the Ubuntu stack behind it for glyphs VCR lacks. VCR has
+# no bold cut, so its bold is synthetic and Ubuntu Bold fills the rest.
+VCR_PATH=../builtinFonts/source/VCROSDMono/VCR_OSD_Mono.ttf
+vcr_font() {  # name size style [fontconvert options]
+  local name=$1 size=$2 style=$3
+  shift 3
+  python fontconvert.py $name $size $VCR_PATH \
+    ../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf \
+    ../builtinFonts/source/NotoSans/NotoSans-${style}.ttf \
+    ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${style}.ttf \
+    ../builtinFonts/source/NotoSansArabic/NotoSansArabic-${style}.ttf \
+    ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf \
+    --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" "$@" > ../builtinFonts/${name}.h
+}
+vcr_font vcr_8_regular 8 Regular
+for size in 10 12; do
+  vcr_font vcr_${size}_regular $size Regular
+  vcr_font vcr_${size}_bold $size Bold --embolden-x 1
+done
 
 echo ""
 echo "Running compression verification..."

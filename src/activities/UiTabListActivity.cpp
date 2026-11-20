@@ -174,6 +174,24 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
     tabProps.selectedUnderline = 2;
   }
+  if (win98Tabs) {
+    tabProps.text = screen.theme().smallText;
+    tabProps.gap = 4;
+    tabProps.tabInset = fui::Insets{6, 0, 0, 0};
+    tabProps.contentInset = fui::Insets{2, 0, 2, 0};
+    tabProps.selectedUnderline = 0;
+    tabStyles.normal.background = fui::Paint::solid(fui::Color::White);
+    tabStyles.normal.border = fui::Paint::solid(fui::Color::Black);
+    tabStyles.normal.borderWidth = 1;
+    tabStyles.normal.radius = 0;
+    tabStyles.selected = tabStyles.normal;
+    if (tabsFocused) {
+      tabStyles.selected.background = fui::Paint::solid(fui::Color::Black);
+      tabStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
+    } else {
+      tabStyles.selected.borderWidth = 3;
+    }
+  }
   // Focus/flash states keep the pill instead of falling back to an unset
   // (blank) style.
   tabStyles.focused = tabStyles.selected;
@@ -188,7 +206,7 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
                           contentTabRect.height};
   // Focused band wash is the Lyra treatment; legacy RoundedRaff keeps the
   // band plain in both states.
-  if (tabsFocused && !metrics.tabPillFullSlot) {
+  if (win98Tabs || (tabsFocused && !metrics.tabPillFullSlot)) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
   // Leave space on both sides of the tab labels and selection highlights.
