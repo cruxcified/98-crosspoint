@@ -2,13 +2,16 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalMemory.h>
 #include <HalStorage.h>
 #include <JPEGDEC.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <ProgressiveJpeg.h>
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <new>
 
@@ -364,6 +367,85 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   return 1;
 }
 
+// JPEGDEC decodes progressive JPEGs only at 1/8 scale (DC coefficients).
+// freeink::ProgressiveJpeg decodes them at full resolution while its luma
+// coefficient store (~2 bytes per pixel) fits in PSRAM.
+constexpr size_t PROGRESSIVE_PSRAM_HEADROOM = 1024 * 1024;  // left for fonts and BLE
+// The decoder does not yield before its first row; bigger images would stall
+// the page turn for seconds, so they keep the 1/8-scale decode.
+constexpr int64_t PROGRESSIVE_MAX_PIXELS = 600 * 1000;
+constexpr int PROGRESSIVE_STRIP_ROWS = 16;  // one JPEGDEC MCU row
+
+int32_t readProgressive(void* file, uint8_t* dst, const uint32_t n) {
+  return static_cast<HalFile*>(file)->read(dst, n);
+}
+
+enum class ProgressiveStart { Ready, NeverFits, NotNow };
+
+// Opens `file` and allocates the coefficient store. NotNow means only the
+// current PSRAM use blocked it, so the 1/8-scale result must not be cached.
+ProgressiveStart beginProgressive(const std::string& path, const int width, const int height,
+                                  std::unique_ptr<freeink::ProgressiveJpeg>& decoder, HalFile& file) {
+  if (static_cast<int64_t>(width) * height > PROGRESSIVE_MAX_PIXELS) return ProgressiveStart::NeverFits;
+  const size_t store = freeink::ProgressiveJpeg::storeBytes(width, height);
+  const HalMemory::HeapStats psram = HalMemory::getPsramHeap();
+  if (store == 0 || store + PROGRESSIVE_PSRAM_HEADROOM > psram.totalBytes) return ProgressiveStart::NeverFits;
+  if (store + PROGRESSIVE_PSRAM_HEADROOM > psram.largestBlockBytes) return ProgressiveStart::NotNow;
+
+  // Heap, not stack: the decoder object holds 512 B of quantization tables.
+  decoder = makeUniqueNoThrow<freeink::ProgressiveJpeg>();
+  if (!decoder) return ProgressiveStart::NotNow;
+  if (!Storage.openFileForRead("JPG", path, file)) return ProgressiveStart::NotNow;
+  // OutOfMemory here means the stream's sampling needs more than the estimate
+  // above, which a retry will not change.
+  if (decoder->begin(readProgressive, &file) == freeink::ProgressiveJpeg::Status::Ok && file.seek(0)) {
+    return ProgressiveStart::Ready;
+  }
+  file.close();
+  decoder.reset();
+  return ProgressiveStart::NeverFits;
+}
+
+// Collects decoded rows into MCU-height strips for jpegDrawCallback, so
+// scaling, dithering and the pixel cache match the JPEGDEC path.
+struct ProgressiveStrips {
+  JpegContext* ctx;
+  uint8_t* pixels;
+  int width;
+  int firstRow;
+  int rows;
+};
+
+bool flushProgressiveStrip(ProgressiveStrips& strips) {
+  if (strips.rows == 0) return true;
+  JPEGDRAW draw{};
+  draw.y = strips.firstRow;
+  draw.iWidth = strips.width;
+  draw.iWidthUsed = strips.width;
+  draw.iHeight = strips.rows;
+  draw.iBpp = 8;
+  draw.pPixels = reinterpret_cast<uint16_t*>(strips.pixels);
+  draw.pUser = strips.ctx;
+  strips.rows = 0;
+  return jpegDrawCallback(&draw) != 0;
+}
+
+bool collectProgressiveRow(void* user, const uint16_t y, const uint8_t* row, const uint16_t width) {
+  auto& strips = *static_cast<ProgressiveStrips*>(user);
+  if (strips.rows == 0) strips.firstRow = y;
+  memcpy(strips.pixels + static_cast<size_t>(strips.rows) * strips.width, row, width);
+  return ++strips.rows < PROGRESSIVE_STRIP_ROWS || flushProgressiveStrip(strips);
+}
+
+bool decodeProgressive(freeink::ProgressiveJpeg& decoder, HalFile& file, const int width, JpegContext& ctx) {
+  const auto pixels = HalMemory::allocatePsram(static_cast<size_t>(width) * PROGRESSIVE_STRIP_ROWS);
+  if (!pixels) return false;
+  ProgressiveStrips strips{&ctx, pixels.get(), width, 0, 0};
+  return decoder.decode(readProgressive, &file, collectProgressiveRow, &strips) ==
+             freeink::ProgressiveJpeg::Status::Ok &&
+         flushProgressiveStrip(strips);
+}
+
 }  // namespace
 
 bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
@@ -440,9 +522,6 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   const int visibleHeight = srcHeight - 2 * static_cast<int>(srcHeight * cropY / 2);
 
   bool isProgressive = jpeg->getJPEGType() == JPEG_MODE_PROGRESSIVE;
-  if (isProgressive) {
-    LOG_INF("JPG", "Progressive JPEG detected - decoding DC coefficients only (lower quality)");
-  }
 
   // Calculate overall target scale
   float targetScale;
@@ -464,37 +543,57 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     destHeight = (int)(visibleHeight * targetScale);
   }
 
-  // Choose JPEGDEC built-in scaling for coarse downscaling.
-  // Progressive JPEGs: JPEGDEC forces JPEG_SCALE_EIGHTH internally (DC-only
-  // decode produces 1/8 resolution). We must match this to avoid the if/else
-  // priority chain in DecodeJPEG selecting a different scale.
-  int jpegScaleOption;
-  int jpegScaleDenom;
-  if (isProgressive) {
-    jpegScaleOption = JPEG_SCALE_EIGHTH;
-    jpegScaleDenom = 8;
-  } else {
-    jpegScaleDenom = chooseJpegScale(targetScale, jpegScaleOption);
-  }
-
   if (destWidth <= 0 || destHeight <= 0) {
     LOG_ERR("JPG", "Degenerate output dimensions %dx%d for %s, skipping render", destWidth, destHeight,
             imagePath.c_str());
     return false;
   }
 
-  ctx.scaledSrcWidth = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
-  ctx.scaledSrcHeight = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
-  ctx.cropLeft = static_cast<int>(ctx.scaledSrcWidth * cropX / 2);
-  ctx.cropTop = static_cast<int>(ctx.scaledSrcHeight * cropY / 2);
-  ctx.scaledSrcWidth -= 2 * ctx.cropLeft;
-  ctx.scaledSrcHeight -= 2 * ctx.cropTop;
-  ctx.dstWidth = destWidth;
-  ctx.dstHeight = destHeight;
-  ctx.fineScaleFPX = (int32_t)((int64_t)destWidth * FP_ONE / ctx.scaledSrcWidth);
-  ctx.invScaleFPX = (int32_t)((int64_t)ctx.scaledSrcWidth * FP_ONE / destWidth);
-  ctx.fineScaleFPY = (int32_t)((int64_t)destHeight * FP_ONE / ctx.scaledSrcHeight);
-  ctx.invScaleFPY = (int32_t)((int64_t)ctx.scaledSrcHeight * FP_ONE / destHeight);
+  // Holds the PSRAM coefficient store from begin() until the decode ends.
+  std::unique_ptr<freeink::ProgressiveJpeg> progressive;
+  HalFile progressiveFile;
+  ProgressiveStart progressiveStart = ProgressiveStart::NeverFits;
+  // At 1/8 scale or below, the DC-only decode already has every needed pixel.
+  if (isProgressive && targetScale > 0.125f) {
+    progressiveStart = beginProgressive(imagePath, srcWidth, srcHeight, progressive, progressiveFile);
+  }
+  const bool fullProgressive = progressiveStart == ProgressiveStart::Ready;
+  if (isProgressive) {
+    LOG_INF("JPG", "Progressive JPEG: %s",
+            fullProgressive ? "full resolution" : "DC coefficients only (lower quality)");
+  }
+
+  // Choose JPEGDEC built-in scaling for coarse downscaling.
+  // Progressive JPEGs: JPEGDEC forces JPEG_SCALE_EIGHTH internally (DC-only
+  // decode produces 1/8 resolution). We must match this to avoid the if/else
+  // priority chain in DecodeJPEG selecting a different scale.
+  int jpegScaleOption;
+  int jpegScaleDenom;
+  if (fullProgressive) {
+    jpegScaleOption = 0;
+    jpegScaleDenom = 1;
+  } else if (isProgressive) {
+    jpegScaleOption = JPEG_SCALE_EIGHTH;
+    jpegScaleDenom = 8;
+  } else {
+    jpegScaleDenom = chooseJpegScale(targetScale, jpegScaleOption);
+  }
+
+  const auto applyScale = [&](const int denom) {
+    ctx.scaledSrcWidth = (srcWidth + denom - 1) / denom;
+    ctx.scaledSrcHeight = (srcHeight + denom - 1) / denom;
+    ctx.cropLeft = static_cast<int>(ctx.scaledSrcWidth * cropX / 2);
+    ctx.cropTop = static_cast<int>(ctx.scaledSrcHeight * cropY / 2);
+    ctx.scaledSrcWidth -= 2 * ctx.cropLeft;
+    ctx.scaledSrcHeight -= 2 * ctx.cropTop;
+    ctx.dstWidth = destWidth;
+    ctx.dstHeight = destHeight;
+    ctx.fineScaleFPX = (int32_t)((int64_t)destWidth * FP_ONE / ctx.scaledSrcWidth);
+    ctx.invScaleFPX = (int32_t)((int64_t)ctx.scaledSrcWidth * FP_ONE / destWidth);
+    ctx.fineScaleFPY = (int32_t)((int64_t)destHeight * FP_ONE / ctx.scaledSrcHeight);
+    ctx.invScaleFPY = (int32_t)((int64_t)ctx.scaledSrcHeight * FP_ONE / destHeight);
+  };
+  applyScale(jpegScaleDenom);
 
   LOG_DBG("JPG", "JPEG %dx%d -> %dx%d (scale %.2f, jpegScale 1/%d, fineScale %.2f)%s", srcWidth, srcHeight, destWidth,
           destHeight, targetScale, jpegScaleDenom, (float)destWidth / ctx.scaledSrcWidth,
@@ -507,7 +606,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   // Start streaming the pixel cache to disk. The band only needs to hold the
   // tallest single decode block: a JPEGDEC MCU cell is at most 16 scaled-source
   // rows tall, which our fine scale maps to this many output rows.
-  ctx.caching = !config.cachePath.empty();
+  ctx.caching = !config.cachePath.empty() && progressiveStart != ProgressiveStart::NotNow;
   if (ctx.caching) {
     const int maxBlockDstRows = (int)(((int64_t)16 * ctx.fineScaleFPY) >> FP_SHIFT) + 2;
     if (!ctx.cache.begin(config.cachePath, destWidth, destHeight, config.x, config.y, maxBlockDstRows)) {
@@ -518,7 +617,21 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
 
   unsigned long decodeStart = millis();
   ctx.lastYieldMs = decodeStart;
-  rc = jpeg->decode(0, 0, jpegScaleOption);
+  if (fullProgressive) {
+    rc = decodeProgressive(*progressive, progressiveFile, srcWidth, ctx) ? 1 : 0;
+    progressiveFile.close();
+    progressive.reset();
+    if (rc != 1) {
+      // A stream the SDK decoder rejects can still decode at 1/8 scale; not cached.
+      LOG_ERR("JPG", "Full progressive decode failed, using DC coefficients: %s", imagePath.c_str());
+      if (ctx.caching) ctx.cache.abort();
+      ctx.caching = false;
+      applyScale(8);
+      rc = jpeg->decode(0, 0, JPEG_SCALE_EIGHTH);
+    }
+  } else {
+    rc = jpeg->decode(0, 0, jpegScaleOption);
+  }
   unsigned long decodeTime = millis() - decodeStart;
 
   if (rc != 1) {

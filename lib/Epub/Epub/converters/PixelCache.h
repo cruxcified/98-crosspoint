@@ -11,7 +11,7 @@
 // Streaming cache writer for 2-bit pixels (4 levels). Packs 4 pixels per byte,
 // MSB first.
 //
-// The .pxc file is written incrementally in small row bands rather than holding
+// The .px2 file is written incrementally in small row bands rather than holding
 // the whole decoded image in one heap buffer. A full-page image (e.g. 482x728)
 // needs ~88KB packed, which will not fit alongside the ~20KB JPEG decoder on a
 // fragmented 380KB heap (free heap is routinely ~55KB on an image page). When
