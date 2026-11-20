@@ -973,7 +973,9 @@ void EpubReaderActivity::loop() {
     return;  // no build step before the menu shows
   }
 
-  if (footnoteDepth > 0 && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  // The left-edge swipe also reports Back, but on the page it is a page-turn
+  // swipe (see handleBackNavigation), not a return from a followed link.
+  if (footnoteDepth > 0 && !mappedInput.wasBackGesture() && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_BACK_OR_HOME_MS) {
     restoreSavedPosition();
     return;
