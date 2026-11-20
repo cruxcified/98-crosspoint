@@ -46,27 +46,21 @@ ruby -rdigest -e 'puts [
 
 echo "#define UI_10_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./ubuntu_10_regular.h",
-  "./ubuntu_10_bold.h",
+  "./vcr_10_regular.h",
+  "./vcr_10_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define UI_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./ubuntu_12_regular.h",
-  "./ubuntu_12_bold.h",
+  "./vcr_12_regular.h",
+  "./vcr_12_bold.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
 echo "#define SMALL_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./ubuntu_8_regular.h",
-].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
-))"
-
-echo "#define VCR_10_FONT_ID ($(
-ruby -rdigest -e 'puts [
-  "./vcr_10_regular.h",
+  "./vcr_8_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
@@ -78,7 +72,6 @@ FONT_ID_NAMES=(
   UI_10_FONT_ID
   UI_12_FONT_ID
   SMALL_FONT_ID
-  VCR_10_FONT_ID
 )
 
 echo ""

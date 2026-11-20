@@ -202,6 +202,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
+  // Win98 desktop icons
+  enum DESKTOP_ICONS { DESKTOP_ICONS_ALL = 0, DESKTOP_ICONS_BOOKS = 1, DESKTOP_ICONS_NONE = 2 };
+
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, COVER_GRID = 4 };
 
@@ -367,6 +370,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Win98 desktop: which icons show, and the wallpaper BMP path (empty = none)
+  uint8_t desktopIcons = DESKTOP_ICONS_ALL;
+  char desktopWallpaper[96] = "";
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep

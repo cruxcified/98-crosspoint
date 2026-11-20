@@ -117,9 +117,13 @@ The Home screen is the main entry point to the firmware. It looks like a Windows
 * **Network Neighborhood** opens **[File Transfer](#35-file-transfer-screen)**.
 * **Control Panel** opens **[Settings](#36-settings)**.
 * **Plugins** or **OPDS Browser** appears when enabled.
-* The most recently read book appears as the last icon and opens **[Reading Mode](#4-reading-mode)**.
+* Up to three recently read books appear after the apps and open **[Reading Mode](#4-reading-mode)**.
 
 You can also move the selection with **Up** and **Down** and open it with **Confirm**. **Back** resumes the most recent book.
+
+**Desktop Icons** and **Wallpaper** in **Settings → Display** change the desktop. With Desktop Icons set to "Books Only", only the recent books show and the apps are in the Start menu. With "None", the desktop is empty and **Confirm** opens the Start menu.
+
+Every menu and screen uses the VCR OSD Mono pixel font. Characters it does not have (for example Cyrillic, Greek, Hebrew or Arabic) are drawn in Ubuntu. Book text keeps the reader font you chose.
 
 Tap **Start** on the taskbar to open the same list as a menu (without the book), followed by **Shut Down**, which puts the device to sleep the same way the Power button does. Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.
 
@@ -137,6 +141,8 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 * **Rename or Move:** Files can be renamed or moved to a different folder from within the browse screen.
 
 ### 3.4 Library Screen
+
+The Library is titled **My Books** and is drawn as a Windows 98 window: a black title bar, square tabs, a framed list and a status bar with the book position.
 
 The Library indexes up to 4,096 supported books on the SD card and shows their titles and authors without requiring you to remember their folders. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
 
@@ -271,6 +277,10 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   
   The theme styles menus and lists. It does not change the Windows 98 **[Home Screen](#31-home-screen)**.
   - "RoundedRaff" - A rounded theme with additional visual styling
+
+- **Desktop Icons**: Which icons the Windows 98 desktop shows: "All" (apps and up to three recent books), "Books Only", or "None".
+
+- **Wallpaper**: "None" (the grey desktop) or a BMP from the `/sleep` folder. The picture is scaled to cover the desktop and dithered to black and white. Only `/sleep` is listed, not `/.sleep`. This option needs PSRAM, so it appears on the X4 Pro but not on the X3 or X4.
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   

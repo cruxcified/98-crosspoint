@@ -31,7 +31,10 @@ class Win98DesktopActivity final : public Activity {
     Action action;
     const uint8_t* icon;  // null: no icon
     std::string label;
+    int book = -1;  // Resume: index into bookPaths
   };
+
+  static constexpr int MAX_DESKTOP_BOOKS = 3;
 
   struct Box {
     int x = 0;
@@ -46,9 +49,13 @@ class Win98DesktopActivity final : public Activity {
   bool firstRenderDone = false;
 
   // Built in onEnter, read-only afterwards.
-  std::vector<Item> desktopItems;  // grid order; the recent book comes last
-  std::vector<Item> menuItems;     // Start menu: desktop items without the book, then Shut Down
-  std::string resumePath;          // most recent book, empty if none
+  std::vector<Item> desktopItems;            // grid order: apps, then recent books (per SETTINGS.desktopIcons)
+  std::vector<Item> menuItems;               // Start menu: every app, then Shut Down
+  std::string bookPaths[MAX_DESKTOP_BOOKS];  // recent books, newest first
+  int bookCount = 0;
+  std::string wallpaperKey;  // empty: no wallpaper
+  // Set in onEnter; render() clears it if the wallpaper fails to draw.
+  bool hasWallpaper = false;
 
   // Written by loop(), read by render().
   std::atomic<int> selected{0};
@@ -69,7 +76,7 @@ class Win98DesktopActivity final : public Activity {
   int taskbarTop() const;
 
   void handleTap(int x, int y);
-  void activate(Action action);
+  void activate(Action action, int book = 0);
   void checkClock();
 
   void drawDesktop(int selectedIndex) const;
