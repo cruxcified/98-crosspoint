@@ -338,6 +338,8 @@ Side buttons, and Taps and gestures where supported by the device. See the
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
+- **Touch Response** (touch devices): How quickly the first touch is noticed after a few seconds without input. "Standard (50 ms)" (default) matches earlier versions. "Fast (20 ms)" and "Fastest (10 ms)" check the touch screen more often and may use slightly more battery.
+
 - **Layout (reader only)**: Swap the order of the up and down side buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 
 - **Orient Front Buttons**: Make front-button directions follow the reading orientation. Available on devices without touch.
