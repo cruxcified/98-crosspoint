@@ -32,6 +32,8 @@ struct KeyPress {
   uint8_t keycode = 0;
   uint8_t mods = 0;
   bool pressed = true;
+  TypedKey typed = TypedKey::None;  // what a text screen does with it
+  char ch = 0;                      // printable ASCII for TypedKey::Char
 };
 
 bool compiledIn();

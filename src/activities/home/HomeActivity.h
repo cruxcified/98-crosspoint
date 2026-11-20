@@ -58,6 +58,8 @@ class HomeActivity final : public Activity {
     if (item == HomeMenuItem::FILE_TRANSFER || item == HomeMenuItem::OPDS_BROWSER) return i;
     ++i;
     if (item == HomeMenuItem::SETTINGS_MENU) return i;
+    ++i;
+    if (item == HomeMenuItem::NOTEPAD) return i;
     return 0;
   }
 
@@ -68,7 +70,8 @@ class HomeActivity final : public Activity {
     if (idx == i++) return HomeMenuItem::LIBRARY;
     if (slot != HomeMenuItem::NONE && idx == i++) return slot;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
-    if (idx == i) return HomeMenuItem::SETTINGS_MENU;
+    if (idx == i++) return HomeMenuItem::SETTINGS_MENU;
+    if (idx == i) return HomeMenuItem::NOTEPAD;
     return HomeMenuItem::NONE;
   }
   void onRecentBookSelected(const std::string& path);
@@ -78,6 +81,7 @@ class HomeActivity final : public Activity {
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
   void onPluginsOpen();
+  void onNotepadOpen();
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image

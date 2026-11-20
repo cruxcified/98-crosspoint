@@ -101,6 +101,7 @@ RadioInputs inputsFor(const Phase phase, const Scene& s) {
   in.heldForBuild = heldForBuild.load(std::memory_order_relaxed);
   in.idleStopped = radioIdleStopped.load(std::memory_order_relaxed);
   in.hasBond = config->peerAddr[0] != '\0';
+  in.typing = s.typing;
   in.linked = true;
   return in;
 }
@@ -257,6 +258,16 @@ bool serveReader() {
     const Peer peer = port::linked();
     router.table = tableFor(config->remotes, config->remoteCount, peer.addr, peer.name);
     router.chosen = true;
+  }
+  if (lastScene.typing) {
+    // A text screen: the keyboard types. Raw edges and page actions do not apply.
+    while (port::popRaw(raw)) {
+    }
+    while (port::popKey(key)) {
+      if (!key.pressed || key.typed == TypedKey::None || host->type == nullptr) continue;
+      if (host->type(key.typed, key.ch)) acted = true;
+    }
+    return acted;
   }
   const bool viaTable = routes(router.table);
   while (port::popRaw(raw)) {
@@ -542,7 +553,7 @@ bool tick(const Scene& s) {
   // A heap in pieces keeps the radio off until a restart. Restart into the book only from a
   // shown page with no radio start in flight, no sleep, no card or Wi-Fi session.
   if (detail::heapRestartWanted() && !visit.manualConnect && config->enabled && visit.attempted && reader &&
-      s.pageShown && !s.sleeping && !s.storageBusy && !busy() && !s.wifiOn) {
+      !s.typing && s.pageShown && !s.sleeping && !s.storageBusy && !busy() && !s.wifiOn) {
     const Heap heap = host->heap();
     say(false, "Heap fragmented for radio: free=%u largest=%u; silent restart to reader\n",
         static_cast<unsigned>(heap.freeBytes), static_cast<unsigned>(heap.largestBlock));

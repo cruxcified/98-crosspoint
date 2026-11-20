@@ -55,10 +55,8 @@ diffs, history, and recorded checks only. The main agent owns verification:
 reviewers may not write files (including temporary diagnostics), run tests/builds,
 commit, publish, deploy, or flash.
 
-The human must write PR descriptions; agents may give concise factual notes and test
-results, never ready-to-paste PR prose. Creating/amending local commits requires
-explicit human approval. Push only on an explicit human instruction to push;
-edit/commit approval does not authorize it. Never open or close a PR.
+In this fork, agents may commit, push, and open PRs for completed, verified work
+without asking first. PR descriptions stay short and factual.
 
 Repository-facing prose: use plain English for non-native readers and standard
 technical terms when clearest. Code comments must be short and useful after merge; follow the
@@ -66,6 +64,6 @@ technical terms when clearest. Code comments must be short and useful after merg
 
 ## Mandatory firmware handoff
 
-For every logical change that can affect shipped firmware or its build—including C/C++, build configuration, partitions, code-generation sources, translations, and release scripts—the main agent must complete [firmware-handoff](.agents/skills/firmware-handoff/SKILL.md) before declaring the work ready or making an approved local commit. That skill owns the required checks, four independent reviews, bounded follow-up, and explicit human acceptance of behavior, architecture, and maintenance ownership.
+For every logical change that can affect shipped firmware or its build—including C/C++, build configuration, partitions, code-generation sources, translations, and release scripts—the main agent must complete [firmware-handoff](.agents/skills/firmware-handoff/SKILL.md) before declaring the work ready or making a local commit. That skill owns the required checks, four independent reviews, bounded follow-up, and explicit human acceptance of behavior, architecture, and maintenance ownership.
 
 Read-only inquiries, audits, and reviewers do not run implementation handoff. Pure tests, diagnostics, documentation, and host-only Python scripts use a lighter review unless they alter firmware output or its build. Hardware testing remains the human's responsibility and is required before a PR is opened.

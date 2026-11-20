@@ -21,7 +21,7 @@ class ImageBlock final : public Block {
   static void clearRenderFailures();
 
   // A page render draws its image up to ~13 times (BW double-refresh plus every
-  // grayscale band pass), and each draw streams the whole .pxc off SD. The
+  // grayscale band pass), and each draw streams the whole .px2 off SD. The
   // first draw caches the pixel payload in RAM (chunked, heap-gated, falls back
   // to streaming when it doesn't fit); the reader calls this when the page
   // render completes so nothing stays resident between pages.

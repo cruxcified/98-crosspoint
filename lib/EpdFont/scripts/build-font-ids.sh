@@ -64,6 +64,12 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
+echo "#define VCR_10_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./vcr_10_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
 FONT_ID_NAMES=(
   NOTOSANS_12_FONT_ID
   NOTOSANS_14_FONT_ID
@@ -72,6 +78,7 @@ FONT_ID_NAMES=(
   UI_10_FONT_ID
   UI_12_FONT_ID
   SMALL_FONT_ID
+  VCR_10_FONT_ID
 )
 
 echo ""

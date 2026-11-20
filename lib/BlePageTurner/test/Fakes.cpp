@@ -36,8 +36,12 @@ void hostLog(bool error, const char* format, va_list args) {
   theHost.logs.push_back(std::string(error ? "ERR " : "INF ") + line);
 }
 void hostMap(const char* tag) { theHost.maps.push_back(tag); }
+bool hostType(const bleturner::TypedKey key, const char ch) {
+  theHost.typed += key == bleturner::TypedKey::Enter ? '\n' : key == bleturner::TypedKey::Backspace ? '\b' : ch;
+  return true;
+}
 const bleturner::Host kHost{hostHeap,    hostRelease, hostDeliver, hostYield, hostTransfer,
-                            hostRestart, hostHold,    hostLog,     hostMap};
+                            hostRestart, hostHold,    hostLog,     hostMap,   hostType};
 }  // namespace
 
 Radio& radio() { return theRadio; }

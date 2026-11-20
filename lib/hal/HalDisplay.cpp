@@ -75,6 +75,11 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
 }
 
+void HalDisplay::displayWindow(const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h,
+                               const bool turnOffScreen) {
+  einkDisplay.displayWindow(x, y, w, h, turnOffScreen);
+}
+
 void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }

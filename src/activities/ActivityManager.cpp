@@ -21,10 +21,11 @@
 #include "components/HeaderBackTapTarget.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
-#include "home/HomeActivity.h"
+#include "home/Win98DesktopActivity.h"
 #include "library/LibraryListActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "network/UsbDriveActivity.h"
+#include "notepad/NotepadActivity.h"
 #include "plugins/PluginCatalogActivity.h"
 #include "reader/ReaderActivity.h"
 #include "reader/RemoteTurnGate.h"
@@ -153,7 +154,8 @@ void ActivityManager::loop() {
     // The page turner's radio gives its heap back before the next screen allocates. Its teardown
     // can span loop passes and runs outside the render lock.
     if (pendingAction != PendingAction::ReplaceForSleep &&
-        !bleturner::beforeScreenChange(0, pendingActivity && pendingActivity->isReaderActivity())) {
+        !bleturner::beforeScreenChange(
+            0, pendingActivity && (pendingActivity->isReaderActivity() || pendingActivity->acceptsTypedInput()))) {
       return;
     }
     if (pendingAction == PendingAction::Pop) {
@@ -320,6 +322,8 @@ void ActivityManager::goToBrowser() {
   }
 }
 
+void ActivityManager::goToNotepad() { replaceActivity(std::make_unique<NotepadActivity>(renderer, mappedInput)); }
+
 void ActivityManager::goToPlugins() {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, /*rootMode=*/true));
 }
@@ -373,9 +377,11 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "Settings" || activityName == "SettingsList") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
+    } else if (activityName == "Notepad") {
+      initialMenuItem = HomeMenuItem::NOTEPAD;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
+  replaceActivity(std::make_unique<Win98DesktopActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
@@ -419,6 +425,12 @@ bool ActivityManager::isForegroundReader() const {
 bool ActivityManager::isRemoteReaderContext() const {
   return pendingAction == PendingAction::None && currentActivity && currentActivity->acceptsRemoteInput();
 }
+
+bool ActivityManager::isTypingContext() const {
+  return pendingAction == PendingAction::None && currentActivity && currentActivity->acceptsTypedInput();
+}
+
+bool ActivityManager::typeKey(const char ch) { return isTypingContext() && currentActivity->typeKey(ch); }
 
 bool ActivityManager::remoteClick(const RemoteButton button) {
   if (!isRemoteReaderContext() || RenderLock::peek() || requestedUpdate.load()) return false;

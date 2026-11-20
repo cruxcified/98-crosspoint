@@ -114,6 +114,9 @@ EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
 
+EpdFont vcr10Font(&vcr_10_regular);
+EpdFontFamily vcr10FontFamily(10, &vcr10Font);
+
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
@@ -289,6 +292,20 @@ bool deliver(const bleturner::Action action) {
   return false;
 }
 
+bool type(const bleturner::TypedKey key, const char ch) {
+  switch (key) {
+    case bleturner::TypedKey::Char:
+      return activityManager.typeKey(ch);
+    case bleturner::TypedKey::Enter:
+      return activityManager.typeKey('\n');
+    case bleturner::TypedKey::Backspace:
+      return activityManager.typeKey('\b');
+    case bleturner::TypedKey::None:
+      return false;
+  }
+  return false;
+}
+
 bool yieldForRadio() { return true; }        // the reader keeps no parser alive between pages
 bool fileTransferActive() { return false; }  // file transfer is a screen of its own: the radio is off there
 void restartIntoBook() { silentRestartToReader(); }
@@ -313,7 +330,7 @@ void log(const bool error, const char* format, va_list args) {
 }
 
 const bleturner::Host host{heap,          releaseCaches, deliver, yieldForRadio, fileTransferActive, restartIntoBook,
-                           holdFullSpeed, log,           nullptr};
+                           holdFullSpeed, log,           nullptr, type};
 }  // namespace pageturner
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
@@ -529,6 +546,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.insertFont(VCR_10_FONT_ID, vcr10FontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
@@ -832,12 +850,15 @@ void loop() {
   bleturner::Scene scene{};
   // Home counts only for builds whose radio may start there (the S3 profile, RadioPolicy.h).
   const bool homeShown = activityManager.isForegroundHomeShown();
-  const bool remoteContext = activityManager.isRemoteReaderContext();
+  // Notepad counts as a book for the radio; its keys type instead of turning pages.
+  const bool typing = activityManager.isTypingContext();
+  const bool remoteContext = activityManager.isRemoteReaderContext() || typing;
   scene.where = remoteContext ? bleturner::Where::Reader
                 : homeShown   ? bleturner::Where::Home
                               : bleturner::Where::Elsewhere;
   scene.visit = activityManager.visit();
   scene.pageShown = homeShown || remoteContext;
+  scene.typing = typing;
   scene.storageBusy = activityManager.requiresExclusiveStorageLoop();
   scene.wifiOn = WiFi.getMode() != WIFI_MODE_NULL;
   const bool remoteActed = bleturner::tick(scene);
@@ -944,7 +965,7 @@ void loop() {
     screenshotComboActive = false;
   }
 
-  if (mappedInputManager.powerSleepClick()) {
+  if (mappedInputManager.powerSleepClick() || activityManager.takeSleepRequest()) {
     enterDeepSleep();
     return;
   }
