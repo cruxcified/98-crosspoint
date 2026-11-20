@@ -230,6 +230,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum HAPTIC_INTENSITY { HAPTIC_LOW = 0, HAPTIC_MEDIUM = 1, HAPTIC_HIGH = 2 };
   uint8_t hapticIntensity = HAPTIC_HIGH;
 
+  // Idle input-poll interval once the device has been idle for a few seconds.
+  enum TOUCH_RESPONSE {
+    TOUCH_RESPONSE_50MS = 0,
+    TOUCH_RESPONSE_20MS = 1,
+    TOUCH_RESPONSE_10MS = 2,
+    TOUCH_RESPONSE_COUNT
+  };
+
   enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };
 
   // Per-direction reader page-turn gestures. INVERTED_TAP is tap-only; either
@@ -400,6 +408,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t tiltPageTurn = TILT_OFF;
   // Master reader-touch toggle on boards with a touch controller.
   uint8_t touchReaderControls = TOUCH_READER_ON;
+  uint8_t touchResponse = TOUCH_RESPONSE_50MS;
   // Which gestures turn the page in each direction (PAGE_TURN_GESTURE).
   uint8_t pageTurnGesture = SWIPE_ONLY;
   uint8_t previousPageGesture = SWIPE_ONLY;
@@ -505,6 +514,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
+  unsigned long getIdleInputPollMs() const {
+    switch (touchResponse) {
+      case TOUCH_RESPONSE_20MS:
+        return 20;
+      case TOUCH_RESPONSE_10MS:
+        return 10;
+      default:
+        return 50;
+    }
+  }
   int getRefreshFrequency() const;
 };
 
