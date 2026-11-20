@@ -74,6 +74,7 @@ class NotepadActivity final : public Activity {
   std::string text;
   bool dirty = false;
   bool firstRender = true;
+  bool rotated = false;  // next frame takes a half refresh
   bool buffersReady = false;
   // Landscape while a Bluetooth keyboard is linked; loop-side, under the lock.
   bool landscape = false;

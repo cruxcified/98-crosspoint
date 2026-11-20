@@ -69,7 +69,6 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   // not use this — it closes the panel and promotes the repaint underneath
   // instead (GfxRenderer::promoteNextRefresh).
   bool cleanRefreshPending = false;
-  bool firstRenderDone = false;
 
  public:
   explicit FrontlightPanelActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);

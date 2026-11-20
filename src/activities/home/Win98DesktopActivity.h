@@ -14,14 +14,14 @@
 class Win98DesktopActivity final : public Activity {
  public:
   explicit Win98DesktopActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                HomeMenuItem initialMenuItem = HomeMenuItem::NONE)
-      : Activity("Home", renderer, mappedInput), initialMenuItem(initialMenuItem) {}
+                                HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
+      : Activity("Home", renderer, mappedInput),
+        initialMenuItem(initialMenuItem),
+        cleanInitialRefresh(cleanInitialRefresh) {}
 
   void onEnter() override;
-  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  void prepareForSleep() override { sleeping = true; }
   bool isHomeActivity() const override { return true; }
 
  private:
@@ -42,9 +42,8 @@ class Win98DesktopActivity final : public Activity {
   };
 
   const HomeMenuItem initialMenuItem;
+  const bool cleanInitialRefresh;
   bool firstRenderDone = false;
-  bool menuWasOpen = false;  // render-side: the last frame showed the Start menu
-  bool sleeping = false;     // set by prepareForSleep; onExit then skips the refresh promotion
 
   // Built in onEnter, read-only afterwards.
   std::vector<Item> desktopItems;  // grid order; the recent book comes last

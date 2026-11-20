@@ -236,19 +236,13 @@ class GfxRenderer {
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // One-shot: the next displayBuffer(), displayBufferAsync(), or
   // displayGrayscaleBase() call uses `mode`
-  // instead of what its caller asked for, unless the caller asked for a
-  // stronger refresh, then the override clears itself.
+  // instead of what its caller asked for, then the override clears itself.
   // Lets a closing overlay (the control center's refresh tile) hand a
   // ghost-cleanup waveform to the repaint of whatever screen is underneath,
   // which it cannot reach directly.
-  // FULL is the strongest refresh, FAST the weakest (enum order).
-  static HalDisplay::RefreshMode strongerRefresh(const HalDisplay::RefreshMode a, const HalDisplay::RefreshMode b) {
-    return a < b ? a : b;
-  }
-  // Two promotions before a refresh keep the stronger one.
   void promoteNextRefresh(const HalDisplay::RefreshMode mode) const {
-    promotedRefresh_ = promotedRefreshPending_ ? strongerRefresh(promotedRefresh_, mode) : mode;
     promotedRefreshPending_ = true;
+    promotedRefresh_ = mode;
   }
   // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
   // grayscale strip rendering) can overlap the panel's refresh time. The

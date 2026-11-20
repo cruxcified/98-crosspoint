@@ -98,7 +98,8 @@ void NotepadActivity::setLandscape(const bool on) {
   menuOpen = false;
   followEnd = true;
   if (buffersReady) rewrapToLayout();
-  firstRender = true;  // the whole frame turns: clean refresh
+  firstRender = true;
+  rotated = true;  // the whole frame turns: clean refresh
 }
 
 void NotepadActivity::onEnter() {
@@ -108,6 +109,7 @@ void NotepadActivity::onEnter() {
   path.clear();
   dirty = false;
   firstRender = true;
+  rotated = false;
   topLine = 0;
   followEnd = true;
   menuOpen = false;
@@ -905,6 +907,7 @@ void NotepadActivity::render(RenderLock&&) {
       return;
     }
   }
-  renderer.displayBuffer(firstRender ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(rotated ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   firstRender = false;
+  rotated = false;
 }

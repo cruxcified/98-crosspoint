@@ -356,19 +356,8 @@ void Win98DesktopActivity::render(RenderLock&&) {
   drawDesktop(open ? -1 : selected.load());
   drawTaskbar(open);
   if (open) drawStartMenu(menuSelected);
-  // The dithered desktop ghosts badly under fast refreshes, so arriving here
-  // and closing the Start menu use the cleaner half refresh.
-  const bool clean = !firstRenderDone || (menuWasOpen && !open);
-  renderer.displayBuffer(clean ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   firstRenderDone = true;
-  menuWasOpen = open;
-}
-
-void Win98DesktopActivity::onExit() {
-  Activity::onExit();
-  // Wipe the desktop cleanly under the next screen. Sleep draws its own
-  // screen with its own refresh, so leave that alone.
-  if (!sleeping) renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
 }
 
 void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {

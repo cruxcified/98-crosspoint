@@ -1766,7 +1766,7 @@ void GfxRenderer::invertScreen() const {
 HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh(const HalDisplay::RefreshMode refreshMode) const {
   if (!promotedRefreshPending_) return refreshMode;
   promotedRefreshPending_ = false;
-  return strongerRefresh(refreshMode, promotedRefresh_);
+  return promotedRefresh_;
 }
 
 void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
@@ -2433,8 +2433,7 @@ void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
 
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
-  if (!display.displayGrayscaleBase(
-          mode, promotedRefreshPending_ ? strongerRefresh(fallback, promotedRefresh_) : fallback, fadingFix))
+  if (!display.displayGrayscaleBase(mode, promotedRefreshPending_ ? promotedRefresh_ : fallback, fadingFix))
     return false;
   promotedRefreshPending_ = false;
   absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
