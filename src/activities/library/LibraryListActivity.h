@@ -14,24 +14,21 @@
 #include "components/OptionPopup.h"
 
 // One Library screen: every indexed book on the card shown by recency, title,
-// author, arrival (New), or folder (Shelf); book rows carry a small cover. The
+// author, arrival (New), or folder (Shelf); books show as a cover grid. The
 // Recent tab orders by file modification time (when a book landed on the card)
 // and pins the recently OPENED books from RecentBooksStore on top, so active
 // reads and fresh arrivals share one list. New is the same order without pins.
 //
-// The two-slot row is the whole point rather than a styling choice: the problem
-// being solved is "I cannot find my books because I do not know the authors",
-// and that is answered by a column the eye can sweep, not by a tidier filename.
+// Books render as a fui::coverGrid bookshelf (covers on planks, one-line
+// titles); collapsed groups and the shelf list stay fui::list rows. Both sit on
+// the UiTabListActivity ring (0 = the sort strip, 1..N = the entries), which is
+// what brings touch to entries and tabs. The grid keeps that ring's linear
+// selection: Next/Previous walk the covers in reading order.
 //
-// Rows render through fui::list on the UiTabListActivity ring (0 = the sort
-// strip, 1..N = the books), which is what brings touch to rows and tabs. Titles
-// are truncated to one line by the widget — more books on the screen, even if
-// half a name is hidden.
-//
-// Only the visible window of rows is materialized per render (strings and
-// ListItems for at most one page). The ordinary shelf therefore keeps one page
-// of strings; an active search additionally uses one fallible uint16_t slot per
-// indexed book so an allocation failure remains recoverable on the C3.
+// Only the visible window is materialized per render (strings and items for at
+// most one page). The ordinary shelf therefore keeps one page of strings; an
+// active search additionally uses one fallible uint16_t slot per indexed book
+// so an allocation failure remains recoverable on the C3.
 class LibraryListActivity final : public UiTabListActivity {
  public:
   LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
@@ -46,10 +43,6 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onRowLongPress(int index) override;
-#if FREEINK_CAP_TOUCH
-  bool canSwipeDelete(int index) const override { return !groupsCollapsed && index >= 0 && index < listCount(); }
-  void swipeDelete(int index) override;
-#endif
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;
@@ -118,11 +111,8 @@ class LibraryListActivity final : public UiTabListActivity {
   void applyFilter();
   int bookRowCount() const;
   int rowFor(int entry) const;
-  // fileName, when asked for, is the on-card name the row's icon derives from
-  // (the display title may come from metadata and carry no extension).
   // bookPath, when asked for, is the full card path (for the cover thumb).
-  bool rowTextFor(int entry, std::string& title, std::string& author, std::string* fileName = nullptr,
-                  std::string* bookPath = nullptr);
+  bool rowTextFor(int entry, std::string& title, std::string& author, std::string* bookPath = nullptr);
   uint32_t titleInitialFor(int entry);
   bool buildGroupStarts();
   int groupForBook(int bookEntry) const;
@@ -132,6 +122,9 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildHeader(UiScreen& screen);
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
+  // Book views: the cover grid, one page of titles and paths at a time.
+  void buildGrid(UiScreen& screen);
+  void paintGridCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect, int index);
   static void formatInitialHeading(uint32_t initial, std::string& out);
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
@@ -195,14 +188,17 @@ class LibraryListActivity final : public UiTabListActivity {
   std::vector<std::string> shelfFolders;
   freeink::ui::ListNav expandedNav;
 
-  // Visible-window row storage, reused across renders (buildRows). Bounded by
-  // the densest page, never by the library. Headings get their own storage:
-  // the surname-first inversion must not overwrite the author slot, whose raw
-  // value the next row's group comparison reads.
+  // Visible-window storage, reused across renders (buildRows, buildGrid).
+  // Bounded by one page, never by the library.
   std::vector<freeink::ui::ListItem> winItems;
   std::vector<std::string> winTitles;
   std::vector<std::string> winAuthors;
-  std::vector<std::string> winHeaders;
+  // Cover grid page: card path per visible cover, and the entry of the first.
+  std::vector<std::string> winPaths;
+  int gridTop = 0;
+  bool gridShowsAuthors = false;
+  // Title printed on a cover-less book.
+  freeink::ui::TextStyle coverText{};
 
   // Pinned overlay state: per store entry its RecentAsc row (0xFFFF when the
   // book is not in the index), and the current-direction rows to skip, sorted
@@ -219,7 +215,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // touch event that opened it.
   OptionPopup optionPopup;
 
-  // Row covers. Filled by the render task; missing thumbs are generated in
+  // Grid covers. Painted by the render task; missing thumbs are generated in
   // loop(), which the flag tells cheaply without taking the render lock.
   LibraryCoverCache covers;
   std::atomic<bool> coverWorkPending{false};

@@ -335,18 +335,6 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   requestUpdate();
 }
 
-#if FREEINK_CAP_TOUCH
-void LibraryListActivity::swipeDelete(const int entry) {
-  activeNav().selected = entry + 1;
-  if (isRecentSort(sortOrder) && entry < pinnedCount()) {
-    const auto& book = RECENT_BOOKS.getBooks()[static_cast<size_t>(entry)];
-    promptDeleteBookByPath(book.path, book.title);
-  } else {
-    promptDeleteBook(entry);
-  }
-}
-#endif
-
 // Manual index refresh, same card discipline as the onEnter rebuild: the walk
 // wants the card to itself, and the render task must not read the index (or
 // the filter) around it.
@@ -938,11 +926,9 @@ void LibraryListActivity::rebuildActionTrampoline(const fui::ActionEvent&, void*
 // Title and author for one entry, read straight from the index. Only ever
 // called for rows about to be drawn, so at most a screenful of strings exists
 // at once.
-bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::string& author, std::string* fileName,
-                                     std::string* bookPath) {
+bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::string& author, std::string* bookPath) {
   title.clear();
   author.clear();
-  if (fileName) fileName->clear();
   if (bookPath) bookPath->clear();
   if (entry < pinnedCount()) {
     const auto& books = RECENT_BOOKS.getBooks();
@@ -950,7 +936,6 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
     const auto& book = books[static_cast<size_t>(entry)];
     title = book.title;
     author = book.author;
-    if (fileName) *fileName = book.path;
     if (bookPath) *bookPath = book.path;
     return true;
   }
@@ -964,7 +949,6 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
     if (!index.readAuthor(record, author)) author.clear();
     // The stored title when the book gave one, the filename otherwise.
     if (!index.readTitle(record, title) || title.empty()) index.readName(record, title);
-    if (fileName) index.readName(record, *fileName);
     if (bookPath && !index.readPath(record, *bookPath)) bookPath->clear();
   }
   if (title.empty()) title = tr(STR_LIBRARY_UNKNOWN_TITLE);
@@ -1066,10 +1050,13 @@ void LibraryListActivity::navigateButtons() {
 }
 
 void LibraryListActivity::buildRows(UiScreen& screen) {
+  if (!groupsCollapsed) {
+    buildGrid(screen);
+    return;
+  }
   auto& nav = activeNav();
   const int count = listCount();
   const bool authorGrouped = isAuthorSort(sortOrder);
-  const bool grouped = !isRecentSort(sortOrder) && openShelf < 0;
 
   fui::ListProps props;
   props.count = static_cast<uint16_t>(count);
@@ -1077,34 +1064,15 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 1;
-  // Breathing room between rows; the dense theme default packs the two-line
-  // rows edge-to-edge.
+  // Breathing room between rows; the dense theme default packs the shelf rows
+  // (name and count) edge-to-edge.
   props.rowGap = std::max<int16_t>(screen.theme().listRowGap, 6);
   props.headerUnderline = false;
   // Win98 list view: the selected row is a square black highlight.
   props.rowRadius = 0;
   props.rowStyles.explicitlySet = true;
-  if (groupsCollapsed && !shelfMode) {
-    props.rowStyles.selected.background = fui::Paint::solid(fui::Color::Black);
-    props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
-  } else {
-    // Book rows carry covers, which an inverted row would turn negative:
-    // mark the selection with a thick frame instead.
-    props.rowStyles.selected.background = fui::Paint::solid(fui::Color::White);
-    props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
-    props.rowStyles.selected.border = fui::Paint::solid(fui::Color::Black);
-    props.rowStyles.selected.borderWidth = 3;
-    if (!groupsCollapsed) {
-      props.iconSize = LibraryCoverCache::COVER_HEIGHT;
-      // Covers are narrower than the square icon slot, which already leaves air.
-      props.textGap = 0;
-      // The covers' frames already separate the taller rows.
-      props.rowGap = 2;
-      // Explicit, so the visible-row estimate (and the cover slots it sizes)
-      // matches the drawn rows.
-      props.rowHeight = LibraryCoverCache::COVER_HEIGHT + 16;
-    }
-  }
+  props.rowStyles.selected.background = fui::Paint::solid(fui::Color::Black);
+  props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
   props.rowStyles.focused = props.rowStyles.selected;
   props.rowStyles.active = props.rowStyles.selected;
   syncTabListViewport(screen, props);
@@ -1113,32 +1081,24 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   const size_t cap = static_cast<size_t>(nav.visibleRows > 0 ? nav.visibleRows : 1) + 1;
   if (winTitles.size() < cap) winTitles.resize(cap);
   if (winAuthors.size() < cap) winAuthors.resize(cap);
-  if (!groupsCollapsed && winHeaders.size() < cap) winHeaders.resize(cap);
   winItems.clear();
   if (winItems.capacity() < cap) winItems.reserve(cap);
 
-  int rows = 0;
-  int headers = 0;
-  uint32_t previousInitial = 0;
-  std::string rowFile;
-  rowFile.reserve(128);
-  std::string rowPath;
-  rowPath.reserve(128);
-  covers.beginFrame();
   // Capture this after syncTabListViewport(), which may clamp nav.top.
   const int windowStart = static_cast<int>(props.topIndex);
-  for (int entry = windowStart; entry < count && rows < static_cast<int>(cap); entry++) {
-    std::string& title = winTitles[static_cast<size_t>(rows)];
-    std::string& author = winAuthors[static_cast<size_t>(rows)];
+  for (int entry = windowStart; entry < count && winItems.size() < cap; entry++) {
+    const size_t row = winItems.size();
+    std::string& title = winTitles[row];
+    std::string& author = winAuthors[row];
     fui::ListItem item;
-    if (groupsCollapsed && shelfMode) {
+    if (shelfMode) {
       title = shelfLabel(entry);
-      char count[24];
-      snprintf(count, sizeof(count), tr(STR_LIBRARY_SHELF_COUNT), shelfEnd(entry) - groupStarts[entry]);
-      author = count;
+      char books[24];
+      snprintf(books, sizeof(books), tr(STR_LIBRARY_SHELF_COUNT), shelfEnd(entry) - groupStarts[entry]);
+      author = books;
       item.subtitle = author.c_str();
       item.icon = listIconFor(UIIcon::Folder, 32);
-    } else if (groupsCollapsed) {
+    } else {
       const int bookEntry = groupStarts[entry];
       if (authorGrouped) {
         rowTextFor(bookEntry, title, author);
@@ -1146,56 +1106,176 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
       } else {
         formatInitialHeading(titleInitialFor(bookEntry), title);
       }
-    } else {
-      if (!rowTextFor(entry, title, author, &rowFile, &rowPath)) continue;
-      uint32_t initial = 0;
-      bool startsGroup = false;
-      if (authorGrouped) {
-        startsGroup = rows == 0 || author != winAuthors[static_cast<size_t>(rows - 1)];
-      } else if (grouped) {
-        initial = titleInitialFor(entry);
-        startsGroup = rows == 0 || initial != previousInitial;
-        previousInitial = initial;
-      }
-      if (startsGroup) {
-        std::string& heading = winHeaders[static_cast<size_t>(headers++)];
-        if (authorGrouped)
-          formatAuthorHeading(author, heading);
-        else
-          formatInitialHeading(initial, heading);
-        item.sectionHeading = heading.c_str();
-      }
-      if (!authorGrouped && !author.empty()) item.subtitle = author.c_str();
     }
-
     item.label = title.c_str();
-    // Group headings stay bare; every book row gets its file-type icon.
-    if (!groupsCollapsed && !rowFile.empty()) {
-      item.icon = covers.lookup(rowPath, listIconFor(UITheme::getFileIcon(rowFile), 32));
-    }
     item.actionValue = static_cast<int16_t>(entry);
     winItems.push_back(item);
-    rows++;
   }
 
-  coverWorkPending = covers.hasWork();
   props.items = winItems.data();
   props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
   props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
-#if FREEINK_CAP_TOUCH
-  configureSwipeDelete(screen, props);
-#endif
   screen.list(props);
-#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
-  const int next = nav.drawnRows;
-  const auto body = screen.body();
-  LOG_DBG("LIB", "page tab=%d top=%d full=%d loaded=%d body=%d..%d next=%d title=%s", activeTabIndex, windowStart,
-          nav.drawnRows, rows, body.y, body.bottom(),
-          next < rows ? winItems[static_cast<size_t>(next)].actionValue : -1,
-          next < rows ? winItems[static_cast<size_t>(next)].label : "<none>");
-  LOG_DBG("LIB", "page first=%d title=%s", rows > 0 ? winItems[0].actionValue : -1,
-          rows > 0 ? winItems[0].label : "<none>");
-#endif
+}
+
+namespace {
+constexpr uint8_t GRID_COLUMNS = 3;
+constexpr int GRID_ROWS = 3;
+constexpr int16_t GRID_PAD = 6;
+constexpr int16_t GRID_GAP = 8;
+// Selection ring around the cover: its gap plus its width.
+constexpr int16_t RING_GAP = 3;
+constexpr int16_t RING_WIDTH = 3;
+constexpr int16_t RING_ROOM = RING_GAP + RING_WIDTH;
+// The shelf plank under each row of covers, below the selection ring.
+constexpr int16_t PLANK_HEIGHT = 5;
+constexpr int16_t LABEL_GAP = RING_ROOM + PLANK_HEIGHT + 3;
+}  // namespace
+
+// Covers stand on planks, three to a row, with the title under each. Paging is
+// by whole pages: e-ink redraws the screen either way, so a page step shows
+// nine new books for the same refresh as one new row.
+void LibraryListActivity::buildGrid(UiScreen& screen) {
+  auto& nav = activeNav();
+  const int count = listCount();
+  const fui::Rect area{static_cast<int16_t>(listPanel.x + GRID_PAD), static_cast<int16_t>(listPanel.y + GRID_PAD),
+                       static_cast<int16_t>(listPanel.width - 2 * GRID_PAD),
+                       static_cast<int16_t>(listPanel.height - 2 * GRID_PAD)};
+
+  fui::CoverGridProps grid;
+  grid.columns = GRID_COLUMNS;
+  grid.gap = GRID_GAP;
+  grid.rowGap = 0;
+  grid.titleText = screen.theme().smallText;
+  grid.titleText.maxLines = 1;
+  coverText = grid.titleText;
+  coverText.align = fui::TextAlign::Center;
+  coverText.maxLines = 5;
+  const int16_t lineHeight = screen.target().lineHeight(grid.titleText.font);
+  grid.rowHeight = static_cast<int16_t>(area.height / GRID_ROWS);
+  const int scrollRoom = grid.scrollIndicatorWidth + grid.scrollIndicatorGap;
+  const int cellWidth = (area.width - scrollRoom - (GRID_COLUMNS - 1) * GRID_GAP) / GRID_COLUMNS;
+  // A 2:3 cover as tall as the row allows, narrow enough for its ring. The
+  // height names the thumb files, so it is rounded to a coarse step: small
+  // layout changes then reuse the thumbs already on the card.
+  const int coverHeight =
+      std::min(grid.rowHeight - RING_ROOM - LABEL_GAP - lineHeight, (cellWidth - 2 * RING_ROOM) * 3 / 2) & ~7;
+  if (coverHeight < 24) return;
+  covers.setCoverHeight(coverHeight);
+  grid.coverSize = {static_cast<int16_t>(coverHeight * 2 / 3), static_cast<int16_t>(coverHeight)};
+  grid.cellInset = fui::Insets{RING_ROOM, 0, 0, 0};
+  grid.labelGap = LABEL_GAP;
+  grid.labelHeight = lineHeight;
+  grid.selectionIndicator = fui::CoverGridSelectionIndicator::CoverFrame;
+  grid.selectedCoverFrameGap = RING_GAP;
+  grid.selectedCoverFrameWidth = RING_WIDTH;
+  grid.cellStyles.explicitlySet = true;
+  grid.cellStyles.normal.background = fui::Paint::solid(fui::Color::White);
+  grid.cellStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
+  grid.cellStyles.selected = grid.cellStyles.normal;
+  grid.cellStyles.selected.border = fui::Paint::solid(fui::Color::Black);
+  grid.cellStyles.focused = grid.cellStyles.selected;
+  grid.cellStyles.active = grid.cellStyles.selected;
+
+  // ListNav is a linear list: one "row" per cover. It owns the selection,
+  // swipe scrolling and follow-on-build; the viewport is then snapped to
+  // whole grid rows here.
+  const int pageItems = GRID_ROWS * GRID_COLUMNS;
+  const int prevTop = nav.top;
+  fui::ListProps navProps;
+  nav.syncToProps(fui::Rect{0, 0, 1, static_cast<int16_t>(pageItems)}, 1, 0, count, navProps, 1);
+  const int selected = navProps.selectedIndex;
+  const int totalRows = (count + GRID_COLUMNS - 1) / GRID_COLUMNS;
+  const int lastTop = std::max(0, totalRows - GRID_ROWS) * GRID_COLUMNS;
+  int top = navProps.topIndex;
+  if (nav.followPending) {
+    // Keep the page when the selection is already on it.
+    const bool onPage = selected >= prevTop && selected < prevTop + pageItems && prevTop % GRID_COLUMNS == 0;
+    top = onPage ? prevTop
+                 : fui::coverGridTopIndexFor(static_cast<uint16_t>(selected), static_cast<uint16_t>(count),
+                                             GRID_COLUMNS, static_cast<uint16_t>(pageItems));
+  } else {
+    top = (top + GRID_COLUMNS - 1) / GRID_COLUMNS * GRID_COLUMNS;
+  }
+  top = std::min(top, lastTop);
+  nav.top = top;
+  nav.drawnCount = count;
+  nav.onListRendered(static_cast<uint16_t>(top), pageItems, true);
+
+  // One page of titles and paths.
+  const size_t cap = static_cast<size_t>(pageItems);
+  if (winTitles.size() < cap) winTitles.resize(cap);
+  if (winAuthors.size() < cap) winAuthors.resize(cap);
+  if (winPaths.size() < cap) winPaths.resize(cap);
+  gridTop = top;
+  // The Author tab labels covers with the author: it is what that tab sorts by.
+  gridShowsAuthors = isAuthorSort(sortOrder);
+  covers.beginFrame();
+  for (size_t i = 0; i < cap; i++) {
+    const int entry = top + static_cast<int>(i);
+    if (entry >= count || !rowTextFor(entry, winTitles[i], winAuthors[i], &winPaths[i])) {
+      winTitles[i].clear();
+      winAuthors[i].clear();
+      winPaths[i].clear();
+    } else if (gridShowsAuthors && winAuthors[i].empty()) {
+      winAuthors[i] = tr(STR_LIBRARY_UNKNOWN_AUTHOR);
+    }
+  }
+
+  grid.count = static_cast<uint16_t>(count);
+  grid.topIndex = static_cast<uint16_t>(top);
+  grid.selectedIndex = static_cast<int16_t>(selected);
+  grid.action = ACTION_ROW;
+  grid.inputMask = fui::InputTouch | fui::InputLongPress;
+  grid.itemProviderUserData = this;
+  grid.itemProvider = [](const uint16_t index, void* user) {
+    auto* self = static_cast<LibraryListActivity*>(user);
+    const size_t slot = static_cast<size_t>(index - self->gridTop);
+    const auto& labels = self->gridShowsAuthors ? self->winAuthors : self->winTitles;
+    return fui::coverGridItem(slot < labels.size() ? labels[slot].c_str() : "", index);
+  };
+  grid.coverPainterUserData = this;
+  grid.coverPainter = [](fui::DrawTarget& target, const fui::Rect rect, const fui::CoverGridItem&, const uint16_t index,
+                         void* user) {
+    static_cast<LibraryListActivity*>(user)->paintGridCover(target, rect, index);
+    return true;
+  };
+  fui::coverGrid(screen.frame(), area, grid);
+
+  // Planks: a dark board under each row of covers, from the left wall to the
+  // scroll track (or the right wall when there is none).
+  const int rowsDrawn = std::min(GRID_ROWS, (count - top + GRID_COLUMNS - 1) / GRID_COLUMNS);
+  const auto plankX = static_cast<int16_t>(listPanel.x);
+  const int plankRight = count > pageItems ? area.right() - scrollRoom : listPanel.x + listPanel.width;
+  const auto plankWidth = static_cast<int16_t>(plankRight - listPanel.x);
+  for (int row = 0; row < rowsDrawn; row++) {
+    const auto y = static_cast<int16_t>(area.y + row * (grid.rowHeight + grid.rowGap) + grid.cellInset.top +
+                                        coverHeight + RING_ROOM);
+    screen.target().fill(fui::Rect{plankX, y, plankWidth, 2}, fui::Paint::solid(fui::Color::Black));
+    screen.target().fill(fui::Rect{plankX, static_cast<int16_t>(y + 2), plankWidth, PLANK_HEIGHT - 2},
+                         fui::Paint::dither(fui::Color::DarkGray));
+  }
+  coverWorkPending = covers.hasWork();
+}
+
+// The cover from the card, or a plain bound book with the title on it.
+void LibraryListActivity::paintGridCover(fui::DrawTarget& target, const fui::Rect rect, const int index) {
+  const size_t slot = static_cast<size_t>(index - gridTop);
+  const bool inPage = slot < winPaths.size() && slot < winTitles.size();
+  if (!inPage || !covers.paint(renderer, Rect{rect.x, rect.y, rect.width, rect.height}, winPaths[slot])) {
+    const char* title = inPage ? winTitles[slot].c_str() : nullptr;
+    target.fill(rect, fui::Paint::solid(fui::Color::White));
+    // Spine down the left edge.
+    target.fill(fui::Rect{rect.x, rect.y, 3, rect.height}, fui::Paint::solid(fui::Color::Black));
+    target.fill(fui::Rect{static_cast<int16_t>(rect.x + 3), rect.y, 3, rect.height},
+                fui::Paint::dither(fui::Color::DarkGray));
+    if (title && *title) {
+      const fui::Rect inner{static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.height / 5),
+                            static_cast<int16_t>(rect.width - 10), static_cast<int16_t>(rect.height * 3 / 5)};
+      target.text(inner, title, coverText);
+    }
+  }
+  target.stroke(rect, fui::Paint::solid(fui::Color::Black), 1, 0);
 }
 
 void LibraryListActivity::formatInitialHeading(uint32_t initial, std::string& out) {
@@ -1286,6 +1366,8 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
   const int16_t readoutReserved = static_cast<int16_t>(statusBarHeight() + STATUS_BAR_GAP);
   const Rect area = UITheme::getContentArea(renderer);
   const auto bottomInset = static_cast<int16_t>(renderer.getScreenHeight() - area.y - area.height);
+  // Only a cover grid built below asks loop() for thumbs.
+  coverWorkPending = false;
   buildHeader(screen);
   screen.setContentMarginFromScreen(
       fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
@@ -1326,10 +1408,9 @@ Rect LibraryListActivity::statusBarRect() const {
 
 // "12/69 books" in the status bar: which book is selected, out of how many.
 //
-// NOT a page count. How many rows fit varies with the view (author headings
-// consume band height), so a page total grows and shrinks as you scroll. The
-// book position is stable by construction, and it answers the question the
-// reader actually has: how far in am I, and how much is left.
+// NOT a page count: the position stays the same when the view changes (grid
+// or group list), and it answers the question the reader actually has: how
+// far in am I, and how much is left.
 void LibraryListActivity::drawPositionReadout() const {
   const Rect bar = statusBarRect();
   renderer.fillRect(bar.x, bar.y, bar.width, bar.height, false);
