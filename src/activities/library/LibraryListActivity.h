@@ -56,7 +56,7 @@ class LibraryListActivity final : public UiTabListActivity {
   bool handleButtons() override;
   void navigateButtons() override;
   // The FreeInkUI header owns both the title and search touch target.
-  void drawChrome() override {}
+  void drawChrome() override;
   void drawFooter() override;
   // OptionPopup is a self-contained modal: it owns rendering (and the button
   // hints) whenever it is up.
@@ -122,6 +122,9 @@ class LibraryListActivity final : public UiTabListActivity {
   static void formatInitialHeading(uint32_t initial, std::string& out);
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
+  void drawListFrame() const;
+  int statusBarHeight() const;
+  Rect statusBarRect() const;
   void drawHoldHelp() const;
   const char* headerTitle() const override;
 
@@ -193,4 +196,5 @@ class LibraryListActivity final : public UiTabListActivity {
   // Row options modal (Recent long-press menu); owned here so it outlives the
   // touch event that opened it.
   OptionPopup optionPopup;
+  Rect listPanel{};  // list body from the last build, framed by drawFooter
 };

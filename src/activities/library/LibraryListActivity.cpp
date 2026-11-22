@@ -21,6 +21,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/Win98Chrome.h"
 #include "components/icons/headerIcons.h"
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
@@ -30,7 +31,7 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr int SIDE_PADDING = 12;
+constexpr int STATUS_BAR_GAP = 6;
 
 // Side clearance for the footer text in the panel's bottom corners.
 int bottomCornerClearance() {
@@ -75,9 +76,7 @@ const char* tabLabelFor(const int tab) {
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiTabListActivity("Library", renderer, mappedInput, true) {
-  // Three short tab labels: a full-slot pill would stretch across a third of
-  // the screen, so cap it at the label plus padding (slots stay put).
-  tabPillMaxPad = 16;
+  win98Tabs = true;
 }
 
 void LibraryListActivity::onEnter() {
@@ -844,6 +843,13 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   // rows edge-to-edge.
   props.rowGap = std::max<int16_t>(screen.theme().listRowGap, 6);
   props.headerUnderline = false;
+  // Win98 list view: the selected row is a square black highlight.
+  props.rowRadius = 0;
+  props.rowStyles.explicitlySet = true;
+  props.rowStyles.selected.background = fui::Paint::solid(fui::Color::Black);
+  props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
+  props.rowStyles.focused = props.rowStyles.selected;
+  props.rowStyles.active = props.rowStyles.selected;
   syncTabListViewport(screen, props);
 
   // Keep one extra entry in the reusable window for a clipped trailing row.
@@ -950,16 +956,34 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   header.titleText.align = theme.headerTitleAlign;
   header.sidePadding = theme.headerSidePadding;
   header.minTouchSize = theme.minTouchSize;
-  header.styles = theme.popup;
-  if (header.styles.normal.border.kind == fui::PaintKind::None && theme.headerUnderline > 0) {
-    header.styles.normal.border = fui::Paint::solid(fui::Color::Black);
-    header.styles.normal.borderWidth = theme.headerUnderline;
-  }
-  header.trailingStyles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
-  header.borderEdges = fui::EdgeBottom;
   // Same battery/clock band as every GUI.drawHeader screen; the header
   // heights are unified across themes, so the buttons derive from the band.
   GUI.applyHeaderStatus(renderer, header);
+  // Win98 window: a black title bar with white text and boxed caption buttons.
+  header.styles = fui::StyleSet{};
+  header.styles.explicitlySet = true;
+  header.styles.normal.background = fui::Paint::solid(fui::Color::Black);
+  header.titleText.color = fui::Color::White;
+  header.titleText.bold = true;
+  header.status.battery.color = fui::Color::White;
+  header.status.battery.text.color = fui::Color::White;
+  fui::StyleSet captionButton;
+  captionButton.explicitlySet = true;
+  captionButton.normal.background = fui::Paint::solid(fui::Color::White);
+  captionButton.normal.border = fui::Paint::solid(fui::Color::Black);
+  captionButton.normal.borderWidth = 2;
+  captionButton.normal.foreground = fui::Paint::solid(fui::Color::Black);
+  captionButton.selected = captionButton.normal;
+  captionButton.focused = captionButton.normal;
+  captionButton.active = captionButton.normal;
+  captionButton.active.background = fui::Paint::solid(fui::Color::Black);
+  captionButton.active.foreground = fui::Paint::solid(fui::Color::White);
+  header.leadingStyles = captionButton;
+  header.trailingStyles = captionButton;
+  constexpr int16_t CAPTION_BUTTON = 40;
+  header.actionOffsetY = static_cast<int16_t>(header.actionOffsetY + (header.leadingSize - CAPTION_BUTTON) / 2);
+  header.leadingSize = CAPTION_BUTTON;
+  header.trailingSize = CAPTION_BUTTON;
   if (mappedInput.hasTouch()) {
     header.leadingIcon = fui::bitmapFromIcon(icon_header_back_32);
     header.leadingAction = ACTION_BACK;
@@ -989,8 +1013,7 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // The position readout owns the line above the hints; rows must not overlap
   // it.
-  constexpr int READOUT_GAP = 4;  // the list's fold sits just above the readout's line box
-  const int16_t readoutReserved = static_cast<int16_t>(renderer.getLineHeight(SMALL_FONT_ID) + READOUT_GAP);
+  const int16_t readoutReserved = static_cast<int16_t>(statusBarHeight() + STATUS_BAR_GAP);
   const Rect area = UITheme::getContentArea(renderer);
   const auto bottomInset = static_cast<int16_t>(renderer.getScreenHeight() - area.y - area.height);
   buildHeader(screen);
@@ -999,6 +1022,13 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
                   static_cast<int16_t>(bottomInset + metrics.buttonHintsHeight + readoutReserved), 0});
 
   if (!degraded) buildTabBar(screen);
+  // White list view on the grey window face, ending above the status bar.
+  const auto body = screen.body();
+  const Rect bar = statusBarRect();
+  listPanel = Rect{bar.x, body.y, bar.width, bar.y - STATUS_BAR_GAP - body.y};
+  screen.target().fill(fui::Rect{static_cast<int16_t>(listPanel.x), static_cast<int16_t>(listPanel.y),
+                                 static_cast<int16_t>(listPanel.width), static_cast<int16_t>(listPanel.height)},
+                       fui::Paint::solid(fui::Color::White));
   if (bookRowCount() == 0) {
     const char* message = tr(STR_LIBRARY_NO_RESULTS);
     if (filterFailed) {
@@ -1012,32 +1042,48 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
   buildRows(screen);
 }
 
-// "12/69 books" at the bottom right: which book is selected, out of how many.
+int LibraryListActivity::statusBarHeight() const { return renderer.getLineHeight(SMALL_FONT_ID) + 8; }
+
+// Win98 status bar along the bottom: a sunken box holding the readout.
+Rect LibraryListActivity::statusBarRect() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect area = UITheme::getContentArea(renderer);
+  const int side = area.x + 6;
+  const int h = statusBarHeight();
+  const int y = area.y + area.height - metrics.buttonHintsHeight - h - std::max(6, bottomCornerClearance() / 2);
+  return Rect{side, y, renderer.getScreenWidth() - 2 * side, h};
+}
+
+// "12/69 books" in the status bar: which book is selected, out of how many.
 //
 // NOT a page count. How many rows fit varies with the view (author headings
 // consume band height), so a page total grows and shrinks as you scroll. The
 // book position is stable by construction, and it answers the question the
 // reader actually has: how far in am I, and how much is left.
 void LibraryListActivity::drawPositionReadout() const {
+  const Rect bar = statusBarRect();
+  renderer.fillRect(bar.x, bar.y, bar.width, bar.height, false);
+  win98::drawSunken(renderer, bar.x, bar.y, bar.width, bar.height);
   const int count = listCount();
   if (count <= 0) return;
 
   char buf[32];
   const char* positionFormat = groupsCollapsed ? tr(STR_LIBRARY_GROUP_POSITION) : tr(STR_LIBRARY_POSITION);
   snprintf(buf, sizeof(buf), positionFormat, selectedEntry() + 1, count);
-  const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getTextWidth(SMALL_FONT_ID, buf);
-  // Bottom-right of the viewable area, clear of the bezel and rounded corner.
-  const Rect area = UITheme::getContentArea(renderer);
-  const int right = std::max(renderer.getScreenWidth() - area.x - area.width, bottomCornerClearance());
-  const int x = renderer.getScreenWidth() - right - width - SIDE_PADDING;
-  const int y = area.y + area.height - metrics.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
-  renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
+  const int y = bar.y + (bar.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2;
+  renderer.drawText(SMALL_FONT_ID, bar.x + bar.width - width - 8, y, buf, true);
+}
+
+// Sunken white frame around the list, like a Win98 list view.
+void LibraryListActivity::drawListFrame() const {
+  if (listPanel.width <= 0 || listPanel.height <= 0) return;
+  win98::drawSunken(renderer, listPanel.x, listPanel.y, listPanel.width, listPanel.height);
 }
 
 const char* LibraryListActivity::headerTitle() const {
   if (!headerSearchTitle.empty()) return headerSearchTitle.c_str();
-  return degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_LIBRARY);
+  return degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_W98_MY_BOOKS);
 }
 
 void LibraryListActivity::drawHoldHelp() const {
@@ -1053,13 +1099,10 @@ void LibraryListActivity::drawHoldHelp() const {
     help = tr(STR_LIBRARY_HOLD_GROUPS);
   if (!help) return;
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const Rect area = UITheme::getContentArea(renderer);
-  const int left = std::max(area.x, bottomCornerClearance());
-  const int y = area.y + area.height - metrics.buttonHintsHeight - lineHeight;
-  GUI.drawHelpText(renderer,
-                   Rect{left + SIDE_PADDING, y, renderer.getScreenWidth() / 2 - left - SIDE_PADDING, lineHeight}, help);
+  const Rect bar = statusBarRect();
+  GUI.drawHelpText(renderer, Rect{bar.x + 8, bar.y + (bar.height - lineHeight) / 2, bar.width / 2 - 8, lineHeight},
+                   help);
 }
 
 // OptionPopup is a self-contained modal: it owns the whole frame (hints
@@ -1069,7 +1112,13 @@ void LibraryListActivity::render(RenderLock&& lock) {
   UiTabListActivity::render(std::move(lock));
 }
 
+// Grey Win98 window face; the header, tabs and list view paint over it.
+void LibraryListActivity::drawChrome() {
+  renderer.fillRectDither(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), Color::LightGray);
+}
+
 void LibraryListActivity::drawFooter() {
+  drawListFrame();
   drawPositionReadout();
   drawHoldHelp();
 

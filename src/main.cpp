@@ -103,19 +103,18 @@ EpdFontFamily notosans18FontFamily(18, &notosans18RegularFont, &notosans18BoldFo
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&ubuntu_8_regular);
+// Win98 UI: VCR OSD Mono in every UI slot, built with the Ubuntu stack behind
+// it for glyphs VCR lacks (convert-builtin-fonts.sh).
+EpdFont smallFont(&vcr_8_regular);
 EpdFontFamily smallFontFamily(8, &smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
+EpdFont ui10RegularFont(&vcr_10_regular);
+EpdFont ui10BoldFont(&vcr_10_bold);
 EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
+EpdFont ui12RegularFont(&vcr_12_regular);
+EpdFont ui12BoldFont(&vcr_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
-
-EpdFont vcr10Font(&vcr_10_regular);
-EpdFontFamily vcr10FontFamily(10, &vcr10Font);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -546,7 +545,6 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
-  renderer.insertFont(VCR_10_FONT_ID, vcr10FontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);

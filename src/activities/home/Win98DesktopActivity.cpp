@@ -6,11 +6,11 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <I18n.h>
-#include <Utf8.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
@@ -18,6 +18,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/Win98Chrome.h"
+#include "components/Win98Wallpaper.h"
 #include "components/icons/blocks.h"
 #include "components/icons/book.h"
 #include "components/icons/computer.h"
@@ -50,9 +51,8 @@ constexpr int MENU_BORDER = 3;
 
 constexpr unsigned long CLOCK_CHECK_MS = 5000;
 
-// VCR OSD Mono pixel font for desktop text. It covers only ASCII and part of
-// Latin-1, so other text (book titles, translations) uses the UI font.
-constexpr int DESKTOP_FONT = VCR_10_FONT_ID;
+// The UI font slots hold the VCR OSD Mono pixel font (see main.cpp).
+constexpr int DESKTOP_FONT = UI_10_FONT_ID;
 
 // Icons are 1-bpp, MSB first, 0 = ink, stored rotated as GfxRenderer::drawIcon
 // expects: screen pixel (sx, sy) is row 31 - sx, column sy.
@@ -110,17 +110,6 @@ void drawLogo(const GfxRenderer& r, const int x, const int y) {
   r.fillRect(x + 10, y + 10, 8, 8, true);
 }
 
-int fontFor(const GfxRenderer& r, const char* text) {
-  const auto it = r.getFontMap().find(DESKTOP_FONT);
-  if (it == r.getFontMap().end()) return UI_10_FONT_ID;
-  const auto* cursor = reinterpret_cast<const unsigned char*>(text);
-  uint32_t cp;
-  while ((cp = utf8NextCodepoint(&cursor))) {
-    if (!it->second.hasCodepoint(cp)) return UI_10_FONT_ID;
-  }
-  return DESKTOP_FONT;
-}
-
 bool formatClock(char* buf, const size_t size) {
   return halClock.isAvailable() && halClock.formatTime(buf, size, SETTINGS.clockFormat == 1);
 }
@@ -130,32 +119,43 @@ bool formatClock(char* buf, const size_t size) {
 void Win98DesktopActivity::onEnter() {
   Activity::onEnter();
 
-  // At most 7 icons; reserve once so push_back does not reallocate.
-  desktopItems.clear();
-  desktopItems.reserve(8);
-  desktopItems.push_back({Action::Files, ComputerIcon, tr(STR_W98_MY_COMPUTER)});
-  desktopItems.push_back({Action::Library, LibraryIcon, tr(STR_W98_MY_BOOKS)});
-  desktopItems.push_back({Action::Notepad, NotepadIcon, tr(STR_NOTEPAD_TITLE)});
-  desktopItems.push_back({Action::Transfer, TransferIcon, tr(STR_W98_NETWORK)});
-  desktopItems.push_back({Action::Settings, Settings2Icon, tr(STR_W98_CONTROL_PANEL)});
+  // Start menu: every app, then Shut Down. At most 7 entries.
+  menuItems.clear();
+  menuItems.reserve(7);
+  menuItems.push_back({Action::Files, ComputerIcon, tr(STR_W98_MY_COMPUTER)});
+  menuItems.push_back({Action::Library, LibraryIcon, tr(STR_W98_MY_BOOKS)});
+  menuItems.push_back({Action::Notepad, NotepadIcon, tr(STR_NOTEPAD_TITLE)});
+  menuItems.push_back({Action::Transfer, TransferIcon, tr(STR_W98_NETWORK)});
+  menuItems.push_back({Action::Settings, Settings2Icon, tr(STR_W98_CONTROL_PANEL)});
   // Same rule as HomeActivity::slotItem(): Plugins wins over OPDS.
   if (SETTINGS.pluginsEnabled != 0) {
-    desktopItems.push_back({Action::Plugins, BlocksIcon, tr(STR_PLUGINS)});
+    menuItems.push_back({Action::Plugins, BlocksIcon, tr(STR_PLUGINS)});
   } else if (OPDS_STORE.hasServers()) {
-    desktopItems.push_back({Action::Opds, BookIcon, tr(STR_OPDS_BROWSER)});
+    menuItems.push_back({Action::Opds, BookIcon, tr(STR_OPDS_BROWSER)});
   }
-  menuItems.clear();
-  menuItems.reserve(desktopItems.size() + 1);
-  menuItems.assign(desktopItems.begin(), desktopItems.end());
+
+  // Desktop: the apps, then up to three recent books, as the setting allows.
+  desktopItems.clear();
+  desktopItems.reserve(menuItems.size() + MAX_DESKTOP_BOOKS);
+  if (SETTINGS.desktopIcons == CrossPointSettings::DESKTOP_ICONS_ALL) {
+    desktopItems.assign(menuItems.begin(), menuItems.end());
+  }
+  const bool showBooks = SETTINGS.desktopIcons != CrossPointSettings::DESKTOP_ICONS_NONE;
+  bookCount = 0;
+  for (const RecentBook& book : RECENT_BOOKS.getBooks()) {
+    if (bookCount == MAX_DESKTOP_BOOKS) break;
+    if (RecentBooksStore::isMissing(book)) continue;
+    if (showBooks) {
+      desktopItems.push_back(
+          {Action::Resume, BookIcon, book.title.empty() ? tr(STR_CONTINUE_READING) : book.title, bookCount});
+    }
+    bookPaths[bookCount++] = book.path;
+  }
   menuItems.push_back({Action::ShutDown, nullptr, tr(STR_W98_SHUT_DOWN)});
 
-  resumePath.clear();
-  for (const RecentBook& book : RECENT_BOOKS.getBooks()) {
-    if (RecentBooksStore::isMissing(book)) continue;
-    resumePath = book.path;
-    desktopItems.push_back({Action::Resume, BookIcon, book.title.empty() ? tr(STR_CONTINUE_READING) : book.title});
-    break;
-  }
+  wallpaperKey = win98::wallpaperKey(renderer, SETTINGS.desktopWallpaper);
+  hasWallpaper = !wallpaperKey.empty();
+  if (!hasWallpaper) win98::releaseWallpaper();
 
   // Return to the icon the user opened.
   Action initial = Action::Files;
@@ -256,6 +256,17 @@ void Win98DesktopActivity::loop() {
   }
 
   const int count = visibleIconCount();
+  if (count == 0) {
+    // No icons: Confirm opens the Start menu.
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      menuSelected = 0;
+      menuOpen = true;
+      requestUpdate();
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back) && bookCount > 0) {
+      activate(Action::Resume);
+    }
+    return;
+  }
   buttonNavigator.onNext([this, count] {
     selected = ButtonNavigator::nextIndex(selected, count);
     requestUpdate();
@@ -265,8 +276,8 @@ void Win98DesktopActivity::loop() {
     requestUpdate();
   });
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && selected < count) {
-    activate(desktopItems[selected].action);
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back) && !resumePath.empty()) {
+    activate(desktopItems[selected].action, desktopItems[selected].book);
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back) && bookCount > 0) {
     // Back is otherwise unused at home: resume the last book, as HomeActivity does.
     activate(Action::Resume);
   }
@@ -299,16 +310,16 @@ void Win98DesktopActivity::handleTap(const int x, const int y) {
     if (iconCell(i).contains(x, y)) {
       haptic_feedback::touchAction();
       selected = i;
-      activate(desktopItems[i].action);
+      activate(desktopItems[i].action, desktopItems[i].book);
       return;
     }
   }
 }
 
-void Win98DesktopActivity::activate(const Action action) {
+void Win98DesktopActivity::activate(const Action action, const int book) {
   switch (action) {
     case Action::Resume:
-      activityManager.goToReader(resumePath);
+      if (book >= 0 && book < bookCount) activityManager.goToReader(bookPaths[book]);
       break;
     case Action::Files:
       activityManager.goToFileBrowser();
@@ -353,6 +364,9 @@ void Win98DesktopActivity::checkClock() {
 void Win98DesktopActivity::render(RenderLock&&) {
   const bool open = menuOpen;
   renderer.clearScreen();
+  // A wallpaper that fails to draw falls back to the grey desktop for good.
+  if (hasWallpaper) hasWallpaper = win98::drawWallpaper(renderer, SETTINGS.desktopWallpaper, wallpaperKey);
+  if (!hasWallpaper) renderer.fillRectDither(0, 0, renderer.getScreenWidth(), taskbarTop(), Color::LightGray);
   drawDesktop(open ? -1 : selected.load());
   drawTaskbar(open);
   if (open) drawStartMenu(menuSelected);
@@ -361,18 +375,24 @@ void Win98DesktopActivity::render(RenderLock&&) {
 }
 
 void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {
-  renderer.fillRectDither(0, 0, renderer.getScreenWidth(), taskbarTop(), Color::LightGray);
-
   const int iconSize = ICON * ICON_SCALE;
   for (int i = 0; i < visibleIconCount(); ++i) {
     const Box c = iconCell(i);
     const Item& item = desktopItems[i];
-    drawIconScaled(renderer, item.icon, c.x + (c.w - iconSize) / 2, c.y + 4, ICON_SCALE, true, true);
+    const int ix = c.x + (c.w - iconSize) / 2;
+    const int iy = c.y + 4;
+    if (hasWallpaper) {
+      // White halo so dark parts of the wallpaper do not swallow the outline.
+      for (const auto [dx, dy] : {std::pair{-ICON_SCALE, 0}, {ICON_SCALE, 0}, {0, -ICON_SCALE}, {0, ICON_SCALE}}) {
+        drawIconScaled(renderer, item.icon, ix + dx, iy + dy, ICON_SCALE, false, false);
+      }
+    }
+    drawIconScaled(renderer, item.icon, ix, iy, ICON_SCALE, true, true);
 
     // Label drawn straight on the desktop; the selected one sits on a black
     // box. Wrapped to two lines like Win98.
     const bool sel = i == selectedIndex;
-    const int font = fontFor(renderer, item.label.c_str());
+    const int font = DESKTOP_FONT;
     const int lineH = renderer.getLineHeight(font);
     const auto lines = renderer.wrappedText(font, item.label.c_str(), c.w - 2 * LABEL_PAD - 2, 2);
     int ly = c.y + 4 + iconSize + 4;
@@ -380,7 +400,8 @@ void Win98DesktopActivity::drawDesktop(const int selectedIndex) const {
       const int tw = renderer.getTextWidth(font, line.c_str());
       const int bw = tw + 2 * LABEL_PAD;
       const int bx = c.x + (c.w - bw) / 2;
-      if (sel) renderer.fillRect(bx, ly, bw, lineH, true);
+      // On a wallpaper every label gets a box so it stays readable.
+      if (sel || hasWallpaper) renderer.fillRect(bx, ly, bw, lineH, sel);
       renderer.drawText(font, bx + LABEL_PAD, ly, line.c_str(), !sel);
       ly += lineH;
     }
@@ -406,7 +427,7 @@ void Win98DesktopActivity::drawTaskbar(const bool startPressed) {
   const int press = startPressed ? 1 : 0;
   drawLogo(renderer, s.x + 10 + press, s.y + (s.h - 18) / 2 + press);
   const char* start = tr(STR_W98_START);
-  const int startFont = fontFor(renderer, start);
+  const int startFont = DESKTOP_FONT;
   const int textH = renderer.getLineHeight(startFont);
   renderer.drawText(startFont, s.x + 36 + press, s.y + (s.h - textH) / 2 + press, start, true);
 
@@ -437,7 +458,7 @@ void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
   const int bh = m.h - 2 * MENU_BORDER;
   renderer.fillRect(bx, by, MENU_BANNER_W, bh, true);
   const char* banner = tr(STR_W98_BANNER);
-  renderer.drawTextRotated90CW(fontFor(renderer, banner), bx + 4, by + bh - 8, banner, false);
+  renderer.drawTextRotated90CW(DESKTOP_FONT, bx + 4, by + bh - 8, banner, false);
 
   // Separator above Shut Down: a dark line over a white one.
   const Box last = menuRow(static_cast<int>(menuItems.size()) - 1);
@@ -453,7 +474,7 @@ void Win98DesktopActivity::drawStartMenu(const int selectedIndex) const {
       drawIconScaled(renderer, menuItems[i].icon, row.x + 8, row.y + (row.h - ICON) / 2, 1, !sel, !sel);
     }
     const int textX = row.x + 8 + ICON + 12;
-    const int font = fontFor(renderer, menuItems[i].label.c_str());
+    const int font = DESKTOP_FONT;
     const int lineH = renderer.getLineHeight(font);
     const std::string label = renderer.truncatedText(font, menuItems[i].label.c_str(), row.x + row.w - 8 - textX);
     renderer.drawText(font, textX, row.y + (row.h - lineH) / 2, label.c_str(), !sel);
