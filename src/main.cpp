@@ -1073,9 +1073,11 @@ void loop() {
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
       // Sleep in short slices and wake the poll as soon as a button contact closes.
       // InputManager commits a press only when two consecutive polls agree, so a
-      // press shorter than one 50 ms sleep could land in a single sample and be lost.
+      // press shorter than one idle sleep could land in a single sample and be lost.
+      // Touch is only read between slices, so Touch Response sets the total sleep.
       const unsigned long idleStart = millis();
-      while (millis() - idleStart < 50) {
+      const unsigned long idlePollMs = SETTINGS.getIdleInputPollMs();
+      while (millis() - idleStart < idlePollMs) {
         delay(10);
         if (gpio.rawInputActive()) break;
       }
