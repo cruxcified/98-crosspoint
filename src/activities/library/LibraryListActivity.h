@@ -2,19 +2,22 @@
 
 #include <LibraryIndexFile.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "LibraryCoverCache.h"
 #include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
 // One Library screen: every indexed book on the card shown by recency, title,
-// or author. The Recent shelf orders by file modification time (when a book
-// landed on the card) and pins the recently OPENED books from RecentBooksStore
-// on top, so active reads and fresh arrivals share one list.
+// author, arrival (New), or folder (Shelf); book rows carry a small cover. The
+// Recent tab orders by file modification time (when a book landed on the card)
+// and pins the recently OPENED books from RecentBooksStore on top, so active
+// reads and fresh arrivals share one list. New is the same order without pins.
 //
 // The two-slot row is the whole point rather than a styling choice: the problem
 // being solved is "I cannot find my books because I do not know the authors",
@@ -35,6 +38,7 @@ class LibraryListActivity final : public UiTabListActivity {
 
   void onEnter() override;
   void onExit() override;
+  void loop() override;
 
  protected:
   // --- UiListActivity / UiTabListActivity contract ---------------------------
@@ -92,6 +96,13 @@ class LibraryListActivity final : public UiTabListActivity {
   bool collapseGroups(int bookEntry);
   void expandGroup(int groupEntry);
   void restoreExpandedList();
+  // Shelf tab: one group per card folder, built over the title order.
+  bool buildShelves();
+  void closeShelf();
+  int shelfEnd(int shelf) const;
+  const char* shelfLabel(int shelf) const;
+  // A search or the shelf order narrows/reorders rows through `filtered`.
+  bool filterActive() const;
   void selectTab(int index, bool toggleIfActive);
   void toggleSortDirection();
   // Sub-screens act on button press, so a button still held when we resume must
@@ -109,7 +120,9 @@ class LibraryListActivity final : public UiTabListActivity {
   int rowFor(int entry) const;
   // fileName, when asked for, is the on-card name the row's icon derives from
   // (the display title may come from metadata and carry no extension).
-  bool rowTextFor(int entry, std::string& title, std::string& author, std::string* fileName = nullptr);
+  // bookPath, when asked for, is the full card path (for the cover thumb).
+  bool rowTextFor(int entry, std::string& title, std::string& author, std::string* fileName = nullptr,
+                  std::string* bookPath = nullptr);
   uint32_t titleInitialFor(int entry);
   bool buildGroupStarts();
   int groupForBook(int bookEntry) const;
@@ -134,7 +147,7 @@ class LibraryListActivity final : public UiTabListActivity {
   bool tabsFocused() const { return ringPos() == 0; }
 
   // --- pinned recently-opened overlay ---------------------------------------
-  // On the unfiltered Recent shelf the RecentBooksStore entries sit on top, in
+  // On the unfiltered Recent tab the RecentBooksStore entries sit on top, in
   // read order; the modification-time list follows with those books skipped.
   // Entries below pinnedCount() are store rows; the rest go through rowFor().
   int pinnedCount() const;
@@ -148,7 +161,8 @@ class LibraryListActivity final : public UiTabListActivity {
   int activeTabIndex = 0;
   library::SortOrder sortOrder = library::SortOrder::RecentDesc;
   // One bit per tab; Recent starts descending (newest first).
-  uint8_t descendingTabs = 1u << 0;
+  // Recent (0) and New (3) start descending (newest first); Shelf (4) A-Z.
+  uint8_t descendingTabs = (1u << 0) | (1u << 3);
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
@@ -171,6 +185,14 @@ class LibraryListActivity final : public UiTabListActivity {
   uint16_t groupCapacity = 0;
   uint16_t groupCount = 0;
   bool groupsCollapsed = false;
+  // Shelf tab state. While shelfMode, groupStarts holds one start per shelf
+  // and shelfNames its folder name (empty = no shelf); openShelf narrows the
+  // rows to one of them.
+  bool shelfMode = false;
+  int openShelf = -1;
+  std::vector<std::string> shelfNames;
+  // Folder path per shelf ("" for the no-shelf bucket).
+  std::vector<std::string> shelfFolders;
   freeink::ui::ListNav expandedNav;
 
   // Visible-window row storage, reused across renders (buildRows). Bounded by
@@ -196,5 +218,10 @@ class LibraryListActivity final : public UiTabListActivity {
   // Row options modal (Recent long-press menu); owned here so it outlives the
   // touch event that opened it.
   OptionPopup optionPopup;
+
+  // Row covers. Filled by the render task; missing thumbs are generated in
+  // loop(), which the flag tells cheaply without taking the render lock.
+  LibraryCoverCache covers;
+  std::atomic<bool> coverWorkPending{false};
   Rect listPanel{};  // list body from the last build, framed by drawFooter
 };

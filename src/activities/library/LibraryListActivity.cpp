@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <FreeInkUIIcon.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -40,11 +41,18 @@ int bottomCornerClearance() {
 }
 
 constexpr unsigned long LONG_PRESS_MS = 1000;
+constexpr unsigned long COVER_PASS_MS = 1000;
 
 constexpr int RECENT_TAB = 0;
 constexpr int TITLE_TAB = 1;
 constexpr int AUTHOR_TAB = 2;
-constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
+// Recently added: arrival order without the opened books pinned on top.
+constexpr int NEW_TAB = 3;
+// One shelf per card folder; opens as the list of shelves.
+constexpr int SHELF_TAB = 4;
+constexpr int TAB_SLOTS = SHELF_TAB + 1;
+// Folders past this share the "no shelf" bucket; keeps the name list small.
+constexpr size_t MAX_SHELVES = 64;
 
 constexpr bool isDescending(const library::SortOrder order) {
   return order == library::SortOrder::RecentDesc || order == library::SortOrder::TitleDesc ||
@@ -63,13 +71,25 @@ constexpr library::SortOrder orderForTab(const int tab, const uint8_t descending
   const bool descending = (descendingTabs & (1u << tab)) != 0;
   if (tab == TITLE_TAB) return descending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
   if (tab == AUTHOR_TAB) return descending ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
+  if (tab == SHELF_TAB) return library::SortOrder::TitleAsc;
   return descending ? library::SortOrder::RecentDesc : library::SortOrder::RecentAsc;
 }
 
 const char* tabLabelFor(const int tab) {
   if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
+  if (tab == NEW_TAB) return tr(STR_LIBRARY_TAB_NEW);
+  if (tab == SHELF_TAB) return tr(STR_LIBRARY_TAB_SHELF);
   return tr(STR_LIBRARY_TAB_RECENT);
+}
+
+// Shelf label for a book: the name of the folder holding it, empty at the root.
+void shelfNameFor(const std::string& path, std::string& out) {
+  out.clear();
+  const size_t slash = path.rfind('/');
+  if (slash == std::string::npos || slash == 0) return;
+  const size_t start = path.rfind('/', slash - 1);
+  out.assign(path, start == std::string::npos ? 0 : start + 1, slash - (start == std::string::npos ? 0 : start + 1));
 }
 
 }  // namespace
@@ -120,6 +140,7 @@ void LibraryListActivity::onEnter() {
 
 void LibraryListActivity::onExit() {
   index.close();
+  covers.release();
   Activity::onExit();
 }
 
@@ -238,8 +259,10 @@ void LibraryListActivity::activateIndex(const int index) {
 // Row long-press prompts delete wherever grouping does not own the gesture:
 // an active search is already a flat list the reader narrowed down on purpose
 // ("find it, hold it, delete it"). Unfiltered Title/Author lists keep
-// collapse-to-groups. The Recent shelf always opens the row options menu.
+// collapse-to-groups. The Recent tab always opens the row options menu.
 bool LibraryListActivity::deleteEligible() const { return !groupsCollapsed && (!query.empty() || !groupable()); }
+
+bool LibraryListActivity::filterActive() const { return !query.empty() || shelfMode; }
 
 void LibraryListActivity::onRowLongPress(const int index) {
   if (isRecentSort(sortOrder)) {
@@ -338,9 +361,23 @@ void LibraryListActivity::promptRebuildIndex() {
 }
 
 void LibraryListActivity::resetAfterRebuild() {
+  // A delete inside a shelf comes back to that shelf. Folder ids change on a
+  // rebuild, so match the folder path.
+  const bool hadOpenShelf = openShelf >= 0;
+  const std::string openFolder = hadOpenShelf ? shelfFolders[openShelf] : std::string();
   // Sort positions, group starts, and pinned rows all point into the old order.
   applyFilter();
   resolvePinned();
+  if (hadOpenShelf && shelfMode) {
+    for (int shelf = 0; shelf < groupCount; shelf++) {
+      if (shelfFolders[shelf] != openFolder) continue;
+      openShelf = shelf;
+      groupsCollapsed = false;
+      break;
+    }
+    // The shelf emptied out: back on the list, at its top.
+    if (openShelf < 0) activeNav().reset(groupCount > 0 ? 1 : 0);
+  }
   auto& nav = activeNav();
   const int count = listCount();
   if (count == 0) {
@@ -448,6 +485,7 @@ void LibraryListActivity::openSearch() {
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
     swallowHeldReleases();
     if (result.isCancelled) return;
+    RenderLock lock(*this);
     query = std::get<KeyboardResult>(result.data).text;
     applyFilter();
     auto& nav = activeNav();
@@ -479,12 +517,16 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
   closeSwipeDelete();
 #endif
   if (index < 0 || index >= TAB_SLOTS) return;
+  // The Shelf tab is always A-Z, so re-selecting it changes nothing.
+  if (toggleIfActive && index == activeTab() && index == SHELF_TAB) return;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
+  // The render task reads the filter and shelf arrays this replaces.
+  RenderLock lock(*this);
   sortOrder = orderForTab(index, descendingTabs);
+  activeTabIndex = index;
   // The filter and the overlap rows hold positions in the old order, so they
   // must be rebuilt.
   applyFilter();
-  activeTabIndex = index;
   refreshOverlap();
   // Tab changes happen only while the bar owns focus. A tab's remembered row
   // must not pull focus back into the list after the switch.
@@ -503,12 +545,14 @@ int LibraryListActivity::activeTab() const { return activeTabIndex; }
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
 
 fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
-  if (index != activeTab()) return fui::TabIndicator::None;
+  // The Shelf tab has no sort arrow: shelves are always A-Z.
+  if (index != activeTab() || index == SHELF_TAB) return fui::TabIndicator::None;
   return isDescending(sortOrder) ? fui::TabIndicator::Down : fui::TabIndicator::Up;
 }
 
 int LibraryListActivity::bookRowCount() const {
-  if (!query.empty()) return static_cast<int>(filteredCount);
+  if (openShelf >= 0) return shelfEnd(openShelf) - groupStarts[openShelf];
+  if (filterActive()) return static_cast<int>(filteredCount);
   // Pinned books already in the index are skipped below the pins, not doubled;
   // pinned books the index missed still show, so the difference stays split.
   const int pinned = pinnedCount();
@@ -522,9 +566,10 @@ int LibraryListActivity::listCount() const { return groupsCollapsed ? static_cas
 // With pins active, entries below pinnedCount() belong to the store and must
 // not reach this; the rest walk past the pinned books' own sort rows.
 int LibraryListActivity::rowFor(const int entry) const {
-  if (!query.empty()) {
-    if (entry < 0 || entry >= static_cast<int>(filteredCount) || !filtered) return 0;
-    return filtered[entry];
+  if (filterActive()) {
+    const int position = entry + (openShelf >= 0 ? groupStarts[openShelf] : 0);
+    if (position < 0 || position >= static_cast<int>(filteredCount) || !filtered) return 0;
+    return filtered[position];
   }
   const int pinned = pinnedCount();
   if (pinned == 0) return entry;
@@ -535,7 +580,14 @@ int LibraryListActivity::rowFor(const int entry) const {
   return row;
 }
 
-bool LibraryListActivity::groupable() const { return !degraded && !isRecentSort(sortOrder) && bookRowCount() > 0; }
+// An open shelf is already one group; its rows are flat, so hold deletes.
+bool LibraryListActivity::groupable() const {
+  return !degraded && !isRecentSort(sortOrder) && openShelf < 0 && bookRowCount() > 0;
+}
+
+int LibraryListActivity::shelfEnd(const int shelf) const {
+  return shelf + 1 < groupCount ? groupStarts[shelf + 1] : static_cast<int>(filteredCount);
+}
 
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -601,6 +653,17 @@ bool LibraryListActivity::collapseGroups(const int bookEntry) {
 
 void LibraryListActivity::expandGroup(const int groupEntry) {
   if (!groupsCollapsed || groupEntry < 0 || groupEntry >= groupCount) return;
+  if (shelfMode) {
+    // A shelf opens on its own, titled with its name; Back returns here. The
+    // tap flash would otherwise land on whichever book now sits under it.
+    app.clearTapFlash();
+    RenderLock lock(*this);
+    openShelf = groupEntry;
+    groupsCollapsed = false;
+    activeNav().reset(1);
+    requestUpdate();
+    return;
+  }
   const int bookEntry = groupStarts[groupEntry];
   groupsCollapsed = false;
   activeNav() = expandedNav;
@@ -609,6 +672,143 @@ void LibraryListActivity::expandGroup(const int groupEntry) {
   nav.top = bookEntry;
   nav.followOnBuild = true;
   requestUpdate();
+}
+
+void LibraryListActivity::closeShelf() {
+  const int shelf = openShelf;
+  app.clearTapFlash();
+  RenderLock lock(*this);
+  openShelf = -1;
+  groupsCollapsed = true;
+  activeNav().reset(shelf + 1);
+  requestUpdate();
+}
+
+const char* LibraryListActivity::shelfLabel(const int shelf) const {
+  if (shelf < 0 || shelf >= static_cast<int>(shelfNames.size())) return "";
+  return shelfNames[shelf].empty() ? tr(STR_LIBRARY_NO_SHELF) : shelfNames[shelf].c_str();
+}
+
+// Title order, regrouped by folder with a stable counting sort. Shelves are
+// keyed on the index folder id, so two folders with the same name stay apart.
+// Temporary cost is one byte per book for the shelf ids; the result reuses
+// `filtered` (two bytes per book) and `groupStarts` (one entry per shelf).
+bool LibraryListActivity::buildShelves() {
+  const int total = static_cast<int>(index.bookCount());
+  if (total <= 0) return true;
+  // The kept array first, so freeing the temporary leaves no hole below it.
+  auto order = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(total));
+  auto ids = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(total));
+  if (!ids || !order) {
+    LOG_ERR("LIB", "cannot allocate %u-byte shelf map", static_cast<unsigned>(total * 3));
+    return false;
+  }
+  // Per shelf id: its folder and one book in it (to read the folder's path).
+  uint16_t folderOf[MAX_SHELVES];
+  uint16_t sampleOf[MAX_SHELVES];
+  size_t shelfTotal = 0;
+  for (int row = 0; row < total; row++) {
+    ids[row] = 0;
+    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
+    library::ClixRecord record{};
+    if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) continue;
+    size_t id = 0;
+    while (id < shelfTotal && folderOf[id] != record.folderId) id++;
+    if (id == shelfTotal) {
+      // Folders past the cap go to the "no shelf" bucket.
+      if (shelfTotal == MAX_SHELVES) {
+        ids[row] = UINT8_MAX;
+        continue;
+      }
+      folderOf[id] = record.folderId;
+      sampleOf[id] = ordinal;
+      shelfTotal++;
+    }
+    ids[row] = static_cast<uint8_t>(id);
+  }
+
+  // Names from the folder paths; the root folder and the overflow share the
+  // unnamed "no shelf" bucket, kept last.
+  shelfNames.clear();
+  shelfNames.reserve(shelfTotal + 1);
+  shelfFolders.clear();
+  shelfFolders.reserve(shelfTotal + 1);
+  std::string path;
+  for (size_t id = 0; id < shelfTotal; id++) {
+    library::ClixRecord record{};
+    std::string name;
+    std::string folder;
+    if (index.readRecord(sampleOf[id], record) && index.readPath(record, path)) {
+      shelfNameFor(path, name);
+      folder = FsHelpers::extractFolderPath(path);
+    }
+    shelfNames.push_back(std::move(name));
+    shelfFolders.push_back(std::move(folder));
+  }
+  const size_t bucketCount = shelfTotal + 1;  // + overflow
+  shelfNames.emplace_back();
+  shelfFolders.emplace_back();
+  // A folder without a name (the card root) is "no shelf" too.
+  uint8_t bucketOf[MAX_SHELVES];
+  for (size_t id = 0; id < shelfTotal; id++) {
+    bucketOf[id] = static_cast<uint8_t>(shelfNames[id].empty() ? shelfTotal : id);
+  }
+
+  uint8_t byRank[MAX_SHELVES + 1];
+  uint8_t rank[MAX_SHELVES + 1];
+  {
+    std::vector<std::string> folds;
+    folds.reserve(bucketCount);
+    for (const auto& name : shelfNames) folds.push_back(library::fold(name));
+    for (size_t i = 0; i < bucketCount; i++) byRank[i] = static_cast<uint8_t>(i);
+    std::stable_sort(byRank, byRank + bucketCount, [&folds](const uint8_t a, const uint8_t b) {
+      if (folds[a].empty() != folds[b].empty()) return folds[b].empty();
+      return folds[a] < folds[b];
+    });
+  }
+  for (size_t r = 0; r < bucketCount; r++) rank[byRank[r]] = static_cast<uint8_t>(r);
+  const auto rankOf = [&](const uint8_t id) { return rank[id == UINT8_MAX ? shelfTotal : bucketOf[id]]; };
+
+  uint16_t counts[MAX_SHELVES + 1] = {};
+  for (int row = 0; row < total; row++) counts[rankOf(ids[row])]++;
+  uint16_t fill[MAX_SHELVES + 1];
+  uint16_t next = 0;
+  for (size_t r = 0; r < bucketCount; r++) {
+    fill[r] = next;
+    next = static_cast<uint16_t>(next + counts[r]);
+  }
+  for (int row = 0; row < total; row++) order[fill[rankOf(ids[row])]++] = static_cast<uint16_t>(row);
+  ids.reset();
+
+  if (groupCapacity < bucketCount) {
+    auto groups = makeUniqueNoThrow<uint16_t[]>(bucketCount);
+    if (!groups) {
+      LOG_ERR("LIB", "OOM: shelf starts");
+      return false;
+    }
+    groupStarts = std::move(groups);
+    groupCapacity = static_cast<uint16_t>(bucketCount);
+  }
+  // Shelves in rank order, empty buckets left out.
+  std::vector<std::string> names;
+  std::vector<std::string> folders;
+  names.reserve(bucketCount);
+  folders.reserve(bucketCount);
+  groupCount = 0;
+  uint16_t start = 0;
+  for (size_t r = 0; r < bucketCount; r++) {
+    if (counts[r] != 0) {
+      groupStarts[groupCount++] = start;
+      names.push_back(std::move(shelfNames[byRank[r]]));
+      folders.push_back(std::move(shelfFolders[byRank[r]]));
+    }
+    start = static_cast<uint16_t>(start + counts[r]);
+  }
+  shelfNames = std::move(names);
+  shelfFolders = std::move(folders);
+  filtered = std::move(order);
+  filteredCount = static_cast<uint16_t>(total);
+  return true;
 }
 
 void LibraryListActivity::restoreExpandedList() {
@@ -628,9 +828,24 @@ void LibraryListActivity::applyFilter() {
   filtered.reset();
   filteredCount = 0;
   filterFailed = false;
+  openShelf = -1;
+  shelfNames.clear();
+  shelfFolders.clear();
   // The header shows the active query in place of the screen title, so the
   // reader can see what narrowed the list without reopening the keyboard.
   headerSearchTitle = query.empty() ? std::string() : "“" + query + "”";
+  // A search on the Shelf tab is a plain title search.
+  shelfMode = activeTabIndex == SHELF_TAB && query.empty() && !degraded;
+  if (shelfMode) {
+    if (!buildShelves()) {
+      shelfMode = false;
+      filterFailed = true;
+      return;
+    }
+    groupsCollapsed = groupCount > 0;
+    expandedNav = activeNav();
+    return;
+  }
   if (query.empty()) return;
 
   const std::string needle = library::fold(query);
@@ -673,12 +888,15 @@ void LibraryListActivity::applyFilter() {
 void LibraryListActivity::handleBackAction() {
   auto& nav = activeNav();
   if (!query.empty()) {
+    RenderLock lock(*this);
     query.clear();
     applyFilter();
     nav.selected = 0;
     nav.top = 0;
     requestUpdate();
-  } else if (groupsCollapsed) {
+  } else if (openShelf >= 0) {
+    closeShelf();
+  } else if (groupsCollapsed && !shelfMode) {
     restoreExpandedList();
   } else if (!tabsFocused() && !degraded) {
     // Keep the current list and viewport while returning focus to the tabs.
@@ -697,6 +915,22 @@ void LibraryListActivity::backActionTrampoline(const fui::ActionEvent&, void* us
   static_cast<LibraryListActivity*>(user)->handleBackAction();
 }
 
+void LibraryListActivity::loop() {
+  UiTabListActivity::loop();
+  if (!coverWorkPending) return;
+  bool changed = false;
+  {
+    // Thumb generation parses the book on the card, which the render task's
+    // SD fonts also read. Bounded per pass so input is polled again soon; the
+    // repaint shows what is done so far.
+    RenderLock lock(*this);
+    const unsigned long start = millis();
+    while (covers.hasWork() && millis() - start < COVER_PASS_MS) changed = covers.loadNext() || changed;
+    coverWorkPending = covers.hasWork();
+  }
+  if (changed) requestUpdate();
+}
+
 void LibraryListActivity::rebuildActionTrampoline(const fui::ActionEvent&, void* user) {
   static_cast<LibraryListActivity*>(user)->promptRebuildIndex();
 }
@@ -704,10 +938,12 @@ void LibraryListActivity::rebuildActionTrampoline(const fui::ActionEvent&, void*
 // Title and author for one entry, read straight from the index. Only ever
 // called for rows about to be drawn, so at most a screenful of strings exists
 // at once.
-bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::string& author, std::string* fileName) {
+bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::string& author, std::string* fileName,
+                                     std::string* bookPath) {
   title.clear();
   author.clear();
   if (fileName) fileName->clear();
+  if (bookPath) bookPath->clear();
   if (entry < pinnedCount()) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (entry < 0 || entry >= static_cast<int>(books.size())) return false;
@@ -715,6 +951,7 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
     title = book.title;
     author = book.author;
     if (fileName) *fileName = book.path;
+    if (bookPath) *bookPath = book.path;
     return true;
   }
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -728,6 +965,7 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
     // The stored title when the book gave one, the filename otherwise.
     if (!index.readTitle(record, title) || title.empty()) index.readName(record, title);
     if (fileName) index.readName(record, *fileName);
+    if (bookPath && !index.readPath(record, *bookPath)) bookPath->clear();
   }
   if (title.empty()) title = tr(STR_LIBRARY_UNKNOWN_TITLE);
   return true;
@@ -831,7 +1069,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = listCount();
   const bool authorGrouped = isAuthorSort(sortOrder);
-  const bool grouped = !isRecentSort(sortOrder);
+  const bool grouped = !isRecentSort(sortOrder) && openShelf < 0;
 
   fui::ListProps props;
   props.count = static_cast<uint16_t>(count);
@@ -846,8 +1084,27 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   // Win98 list view: the selected row is a square black highlight.
   props.rowRadius = 0;
   props.rowStyles.explicitlySet = true;
-  props.rowStyles.selected.background = fui::Paint::solid(fui::Color::Black);
-  props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
+  if (groupsCollapsed && !shelfMode) {
+    props.rowStyles.selected.background = fui::Paint::solid(fui::Color::Black);
+    props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
+  } else {
+    // Book rows carry covers, which an inverted row would turn negative:
+    // mark the selection with a thick frame instead.
+    props.rowStyles.selected.background = fui::Paint::solid(fui::Color::White);
+    props.rowStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
+    props.rowStyles.selected.border = fui::Paint::solid(fui::Color::Black);
+    props.rowStyles.selected.borderWidth = 3;
+    if (!groupsCollapsed) {
+      props.iconSize = LibraryCoverCache::COVER_HEIGHT;
+      // Covers are narrower than the square icon slot, which already leaves air.
+      props.textGap = 0;
+      // The covers' frames already separate the taller rows.
+      props.rowGap = 2;
+      // Explicit, so the visible-row estimate (and the cover slots it sizes)
+      // matches the drawn rows.
+      props.rowHeight = LibraryCoverCache::COVER_HEIGHT + 16;
+    }
+  }
   props.rowStyles.focused = props.rowStyles.selected;
   props.rowStyles.active = props.rowStyles.selected;
   syncTabListViewport(screen, props);
@@ -865,13 +1122,23 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   uint32_t previousInitial = 0;
   std::string rowFile;
   rowFile.reserve(128);
+  std::string rowPath;
+  rowPath.reserve(128);
+  covers.beginFrame();
   // Capture this after syncTabListViewport(), which may clamp nav.top.
   const int windowStart = static_cast<int>(props.topIndex);
   for (int entry = windowStart; entry < count && rows < static_cast<int>(cap); entry++) {
     std::string& title = winTitles[static_cast<size_t>(rows)];
     std::string& author = winAuthors[static_cast<size_t>(rows)];
     fui::ListItem item;
-    if (groupsCollapsed) {
+    if (groupsCollapsed && shelfMode) {
+      title = shelfLabel(entry);
+      char count[24];
+      snprintf(count, sizeof(count), tr(STR_LIBRARY_SHELF_COUNT), shelfEnd(entry) - groupStarts[entry]);
+      author = count;
+      item.subtitle = author.c_str();
+      item.icon = listIconFor(UIIcon::Folder, 32);
+    } else if (groupsCollapsed) {
       const int bookEntry = groupStarts[entry];
       if (authorGrouped) {
         rowTextFor(bookEntry, title, author);
@@ -880,7 +1147,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
         formatInitialHeading(titleInitialFor(bookEntry), title);
       }
     } else {
-      if (!rowTextFor(entry, title, author, &rowFile)) continue;
+      if (!rowTextFor(entry, title, author, &rowFile, &rowPath)) continue;
       uint32_t initial = 0;
       bool startsGroup = false;
       if (authorGrouped) {
@@ -903,12 +1170,15 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
 
     item.label = title.c_str();
     // Group headings stay bare; every book row gets its file-type icon.
-    if (!groupsCollapsed && !rowFile.empty()) item.icon = listIconFor(UITheme::getFileIcon(rowFile), 32);
+    if (!groupsCollapsed && !rowFile.empty()) {
+      item.icon = covers.lookup(rowPath, listIconFor(UITheme::getFileIcon(rowFile), 32));
+    }
     item.actionValue = static_cast<int16_t>(entry);
     winItems.push_back(item);
     rows++;
   }
 
+  coverWorkPending = covers.hasWork();
   props.items = winItems.data();
   props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
   props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
@@ -1069,6 +1339,7 @@ void LibraryListActivity::drawPositionReadout() const {
 
   char buf[32];
   const char* positionFormat = groupsCollapsed ? tr(STR_LIBRARY_GROUP_POSITION) : tr(STR_LIBRARY_POSITION);
+  if (groupsCollapsed && shelfMode) positionFormat = tr(STR_LIBRARY_SHELF_POSITION);
   snprintf(buf, sizeof(buf), positionFormat, selectedEntry() + 1, count);
   const int width = renderer.getTextWidth(SMALL_FONT_ID, buf);
   const int y = bar.y + (bar.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2;
@@ -1083,13 +1354,14 @@ void LibraryListActivity::drawListFrame() const {
 
 const char* LibraryListActivity::headerTitle() const {
   if (!headerSearchTitle.empty()) return headerSearchTitle.c_str();
+  if (openShelf >= 0) return shelfLabel(openShelf);
   return degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_W98_MY_BOOKS);
 }
 
 void LibraryListActivity::drawHoldHelp() const {
   if (mappedInput.hasTouch() || groupsCollapsed) return;
   const char* help = nullptr;
-  if (tabsFocused() && !degraded)
+  if (tabsFocused() && !degraded && activeTabIndex != SHELF_TAB)
     help = tr(STR_LIBRARY_HOLD_SORT);
   else if (!tabsFocused() && isRecentSort(sortOrder) && listCount() > 0)
     help = tr(STR_LIBRARY_HOLD_OPTIONS);  // recent rows: hold opens the row menu
@@ -1122,7 +1394,7 @@ void LibraryListActivity::drawFooter() {
   drawPositionReadout();
   drawHoldHelp();
 
-  const bool backGoesHome = tabsFocused() && !groupsCollapsed && query.empty();
+  const bool backGoesHome = tabsFocused() && (!groupsCollapsed || shelfMode) && query.empty() && openShelf < 0;
   const char* backLabel = backGoesHome ? tr(STR_HOME) : tr(STR_BACK);
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
   const bool canSearch = tabsFocused() && !degraded;
