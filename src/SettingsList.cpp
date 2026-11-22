@@ -54,6 +54,16 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Enum(StrId::STR_W98_DESKTOP_ICONS, &CrossPointSettings::desktopIcons,
                          {StrId::STR_W98_ICONS_ALL, StrId::STR_W98_ICONS_BOOKS, StrId::STR_NONE_OPT}, "desktopIcons",
                          StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_W98_SHOW_COMPUTER, &CrossPointSettings::desktopShowComputer,
+                           "desktopShowComputer", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_W98_SHOW_BOOKS, &CrossPointSettings::desktopShowLibrary, "desktopShowLibrary",
+                           StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_W98_SHOW_NOTEPAD, &CrossPointSettings::desktopShowNotepad, "desktopShowNotepad",
+                           StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_W98_SHOW_NETWORK, &CrossPointSettings::desktopShowNetwork, "desktopShowNetwork",
+                           StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_W98_SHOW_PLUGINS, &CrossPointSettings::desktopShowPlugins, "desktopShowPlugins",
+                           StrId::STR_CAT_DISPLAY));
   if (!BoardConfig::hasTouch())
     emit(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                              StrId::STR_CAT_DISPLAY));

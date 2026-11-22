@@ -380,6 +380,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char dictionaryName[32] = "";
   // Win98 desktop: which icons show, and the wallpaper BMP path (empty = none)
   uint8_t desktopIcons = DESKTOP_ICONS_ALL;
+  // Per-app desktop icons when desktopIcons is All; the Start menu lists every app.
+  uint8_t desktopShowComputer = 1;
+  uint8_t desktopShowLibrary = 1;
+  uint8_t desktopShowNotepad = 1;
+  uint8_t desktopShowNetwork = 1;
+  uint8_t desktopShowPlugins = 1;  // also covers OPDS, which takes the Plugins slot
   char desktopWallpaper[96] = "";
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
