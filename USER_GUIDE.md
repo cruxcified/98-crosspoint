@@ -142,24 +142,27 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library is titled **My Books** and is drawn as a Windows 98 window: a black title bar, square tabs, a framed list and a status bar with the book position.
+The Library is titled **My Books** and is drawn as a Windows 98 window: a black title bar, square tabs, a framed view and a status bar with the book position.
 
-The Library indexes up to 4,096 supported books on the SD card and shows their titles and authors without requiring you to remember their folders. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
+The Library indexes up to 4,096 supported books on the SD card, so you can find them without remembering their folders. Books are shown like a bookshelf: large covers, three to a row on shelf boards, with the title under each cover and nine books per page. A cover is made from the book the first time it is shown and saved in the book's cache folder, so the first visit to a page of new books fills in the covers over a few seconds and later visits are fast. Books without a cover show a plain book with the title on it. The selected book has a thick frame.
 
-- **Recent** lists the ten books you opened most recently. Hold a book to remove it from this list.
-- **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first.
-- **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
-- **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
+Its five tabs provide different views. An arrow beside a tab shows the sort direction:
+
+- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list.
+- **Title** sorts books by title. Up sorts A-Z and down sorts Z-A. The group list (see below) jumps by first letter; titles beginning with numbers or punctuation appear under `#`, and letters from non-English scripts, including Hebrew, have their own groups.
+- **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. The covers are labeled with the author here, and the group list jumps by author.
+- **New** lists books by when they arrived on the card (file date), without the recently opened books on top. Down shows the newest first.
+- **Shelf** turns each folder on the card into a shelf. It shows the list of shelves with their book counts; open one to see its books (A-Z), and press Back to return to the shelves. Books at the top of the card are under **No shelf**. Folders with the same name in different places are separate shelves. Up to 64 folders get their own shelf; books in further folders are under **No shelf**. A search on this tab is a plain title search.
 
 On a button-only device:
 
-- Use **Up/Down** or **Left/Right** to move one row at a time. Hold a direction to move a page at a time.
+- Use **Up/Down** or **Left/Right** to move one book at a time, left to right and then down the shelves. Hold a direction to move a page at a time.
 - Press **Confirm** to open the selected book.
-- Press **Back** from the book list to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the list.
+- Press **Back** from the books to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the books.
 - While the tabs are focused, hold **Confirm** to open Search.
 - In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
 
-On a touch device, tap tabs, books, and the Search icon directly. Tap an active indexed tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent view to remove it from the list. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Added** view is not grouped; tapping or long-pressing a book opens it.
+On a touch device, tap tabs, books, shelves, and the Search icon directly. Tap an active tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent or New view for options. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. Long-press a book inside a shelf to delete it.
 
 The index is created automatically the first time the Library is opened. To pick up later file changes or updated metadata, use **Settings → System → Rebuild library index**. The **Use book metadata** setting controls whether the index reads titles and authors stored inside books.
 
