@@ -14,7 +14,8 @@
 //
 // Threads:
 //   - begin, tick, beforeScreenChange, beforeSleep, afterPaint, the settings calls and
-//     Host::deliver, Host::yieldForRadio, Host::restartIntoBook run on the host's main loop.
+//     Host::deliver, Host::type, Host::yieldForRadio, Host::restartIntoBook run on the host's
+//     main loop.
 //     tick reads the clock itself (RadioPort::nowMs): a remote's hold is timed against the
 //     moment its frame arrived, which can be later than the start of the pass.
 //   - beforeChapterBuild runs on the host's render task while it holds its render lock.
@@ -103,7 +104,10 @@ enum class Why : uint8_t {
   HeapInPieces,    // enough in total, but no block the stack can take
 };
 
-// Module -> host. Every pointer is required except heapMap.
+// A key typed on a linked keyboard while a text screen is in front (Scene::typing).
+enum class TypedKey : uint8_t { None, Char, Enter, Backspace };
+
+// Module -> host. Every pointer is required except heapMap and type.
 struct Host {
   Heap (*heap)();
   // Frees rebuildable caches (fonts from the card) under the host's render lock. Only
@@ -127,6 +131,9 @@ struct Host {
   void (*log)(bool error, const char* format, va_list args);
   // Probe builds: print the heap block by block under `tag`. May be null.
   void (*heapMap)(const char* tag);
+  // A typed key for the text screen in front; `ch` is printable ASCII for TypedKey::Char.
+  // False when the screen did not take it. May be null: then typed keys are dropped.
+  bool (*type)(TypedKey key, char ch) = nullptr;
 };
 
 // Home is the first screen after boot with its first frame up; only a build with the S3 profile
@@ -144,6 +151,8 @@ struct Scene {
   bool wifiOn;
   bool sleeping;  // on the way to sleep
   bool localKey;  // a page key (or touch) of the device was released this pass
+  // A text screen is in front, reported as Reader: keys go to Host::type, not to pages.
+  bool typing;
 };
 
 void begin(const Host& host, Config& config);

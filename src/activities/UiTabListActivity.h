@@ -75,6 +75,9 @@ class UiTabListActivity : public UiListActivity {
   // with more tabs (Settings) keep the default of 0 (fill the slot).
   int16_t tabPillMaxPad = 0;
 
+  // Win98 look: square tabs with borders on a dithered grey band.
+  bool win98Tabs = false;
+
  private:
   static void tabActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 };

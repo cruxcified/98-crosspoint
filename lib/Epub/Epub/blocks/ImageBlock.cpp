@@ -32,12 +32,13 @@ void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
 namespace {
 
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache)
+  // Replace extension with the pixel cache one: ".px2" (was ".pxc") so
+  // 1/8-scale progressive JPEG caches are not reused.
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".pxc";
+    return imagePath.substr(0, dotPos) + ".px2";
   }
-  return imagePath + ".pxc";
+  return imagePath + ".px2";
 }
 
 bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
@@ -88,7 +89,7 @@ void rememberImageFailure(const std::string& path) {
 // --- Per-page-render RAM slot for the pixel cache ----------------------------
 // The tiled grayscale flow re-renders an image page once for the BW
 // double-refresh and again for every band of both gray planes, and each pass
-// re-read the whole .pxc off SD (~100 ms for a full-page image, ~13 passes).
+// re-read the whole .px2 off SD (~100 ms for a full-page image, ~13 passes).
 // Column clipping cannot reduce the SD traffic: the row stride (~100 B) is
 // smaller than an SD sector, so every sector is touched regardless of the band
 // window. Instead the first pass loads the payload into RAM and later passes

@@ -103,15 +103,17 @@ EpdFontFamily notosans18FontFamily(18, &notosans18RegularFont, &notosans18BoldFo
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&ubuntu_8_regular);
+// Win98 UI: VCR OSD Mono in every UI slot, built with the Ubuntu stack behind
+// it for glyphs VCR lacks (convert-builtin-fonts.sh).
+EpdFont smallFont(&vcr_8_regular);
 EpdFontFamily smallFontFamily(8, &smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
+EpdFont ui10RegularFont(&vcr_10_regular);
+EpdFont ui10BoldFont(&vcr_10_bold);
 EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
+EpdFont ui12RegularFont(&vcr_12_regular);
+EpdFont ui12BoldFont(&vcr_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
@@ -289,6 +291,20 @@ bool deliver(const bleturner::Action action) {
   return false;
 }
 
+bool type(const bleturner::TypedKey key, const char ch) {
+  switch (key) {
+    case bleturner::TypedKey::Char:
+      return activityManager.typeKey(ch);
+    case bleturner::TypedKey::Enter:
+      return activityManager.typeKey('\n');
+    case bleturner::TypedKey::Backspace:
+      return activityManager.typeKey('\b');
+    case bleturner::TypedKey::None:
+      return false;
+  }
+  return false;
+}
+
 bool yieldForRadio() { return true; }        // the reader keeps no parser alive between pages
 bool fileTransferActive() { return false; }  // file transfer is a screen of its own: the radio is off there
 void restartIntoBook() { silentRestartToReader(); }
@@ -313,7 +329,7 @@ void log(const bool error, const char* format, va_list args) {
 }
 
 const bleturner::Host host{heap,          releaseCaches, deliver, yieldForRadio, fileTransferActive, restartIntoBook,
-                           holdFullSpeed, log,           nullptr};
+                           holdFullSpeed, log,           nullptr, type};
 }  // namespace pageturner
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
@@ -832,12 +848,15 @@ void loop() {
   bleturner::Scene scene{};
   // Home counts only for builds whose radio may start there (the S3 profile, RadioPolicy.h).
   const bool homeShown = activityManager.isForegroundHomeShown();
-  const bool remoteContext = activityManager.isRemoteReaderContext();
+  // Notepad counts as a book for the radio; its keys type instead of turning pages.
+  const bool typing = activityManager.isTypingContext();
+  const bool remoteContext = activityManager.isRemoteReaderContext() || typing;
   scene.where = remoteContext ? bleturner::Where::Reader
                 : homeShown   ? bleturner::Where::Home
                               : bleturner::Where::Elsewhere;
   scene.visit = activityManager.visit();
   scene.pageShown = homeShown || remoteContext;
+  scene.typing = typing;
   scene.storageBusy = activityManager.requiresExclusiveStorageLoop();
   scene.wifiOn = WiFi.getMode() != WIFI_MODE_NULL;
   const bool remoteActed = bleturner::tick(scene);
@@ -944,7 +963,7 @@ void loop() {
     screenshotComboActive = false;
   }
 
-  if (mappedInputManager.powerSleepClick()) {
+  if (mappedInputManager.powerSleepClick() || activityManager.takeSleepRequest()) {
     enterDeepSleep();
     return;
   }
@@ -1054,9 +1073,11 @@ void loop() {
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
       // Sleep in short slices and wake the poll as soon as a button contact closes.
       // InputManager commits a press only when two consecutive polls agree, so a
-      // press shorter than one 50 ms sleep could land in a single sample and be lost.
+      // press shorter than one idle sleep could land in a single sample and be lost.
+      // Touch is only read between slices, so Touch Response sets the total sleep.
       const unsigned long idleStart = millis();
-      while (millis() - idleStart < 50) {
+      const unsigned long idlePollMs = SETTINGS.getIdleInputPollMs();
+      while (millis() - idleStart < idlePollMs) {
         delay(10);
         if (gpio.rawInputActive()) break;
       }

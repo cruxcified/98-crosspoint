@@ -70,6 +70,14 @@ bool popKey(KeyPress& out) {
   out.keycode = ev.keycode;
   out.mods = ev.mods;
   out.pressed = ev.pressed;
+  out.ch = ev.ch;
+  // Ctrl, Alt and GUI chords are shortcuts, not text.
+  constexpr uint8_t kChordMods = 0xDD;
+  out.typed = (ev.mods & kChordMods) != 0                    ? TypedKey::None
+              : ev.ch != 0                                   ? TypedKey::Char
+              : ev.special == freeink::SpecialKey::Enter     ? TypedKey::Enter
+              : ev.special == freeink::SpecialKey::Backspace ? TypedKey::Backspace
+                                                             : TypedKey::None;
   return true;
 }
 

@@ -109,7 +109,23 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
+The Home screen is the main entry point to the firmware. It looks like a Windows 98 desktop. Tap an icon to open it:
+
+* **My Computer** opens **[Browse Files](#33-browse-files-screen)**.
+* **My Books** opens the **[Library](#34-library-screen)**.
+* **Notepad** opens the Notepad app (notes are saved in `/notes`).
+* **Network Neighborhood** opens **[File Transfer](#35-file-transfer-screen)**.
+* **Control Panel** opens **[Settings](#36-settings)**.
+* **Plugins** or **OPDS Browser** appears when enabled.
+* Up to three recently read books appear after the apps and open **[Reading Mode](#4-reading-mode)**.
+
+You can also move the selection with **Up** and **Down** and open it with **Confirm**. **Back** resumes the most recent book.
+
+**Desktop Icons** and **Wallpaper** in **Settings → Display** change the desktop. With Desktop Icons set to "Books Only", only the recent books show and the apps are in the Start menu. With "None", the desktop is empty and **Confirm** opens the Start menu.
+
+Every menu and screen uses the VCR OSD Mono pixel font. Characters it does not have (for example Cyrillic, Greek, Hebrew or Arabic) are drawn in Ubuntu. Book text keeps the reader font you chose.
+
+Tap **Start** on the taskbar to open the same list as a menu (without the book), followed by **Shut Down**, which puts the device to sleep the same way the Power button does. Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.
 
 ### 3.2 Reading Mode
 
@@ -126,22 +142,27 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library indexes up to 4,096 supported books on the SD card and shows their titles and authors without requiring you to remember their folders. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
+The Library is titled **My Books** and is drawn as a Windows 98 window: a black title bar, square tabs, a framed view and a status bar with the book position.
 
-- **Recent** lists the ten books you opened most recently. Hold a book to remove it from this list.
-- **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first.
-- **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
-- **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
+The Library indexes up to 4,096 supported books on the SD card, so you can find them without remembering their folders. Books are shown like a bookshelf: large covers, three to a row on shelf boards, with the title under each cover and nine books per page. A cover is made from the book the first time it is shown and saved in the book's cache folder, so the first visit to a page of new books fills in the covers over a few seconds and later visits are fast. Books without a cover show a plain book with the title on it. The selected book has a thick frame.
+
+Its five tabs provide different views. An arrow beside a tab shows the sort direction:
+
+- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list.
+- **Title** sorts books by title. Up sorts A-Z and down sorts Z-A. The group list (see below) jumps by first letter; titles beginning with numbers or punctuation appear under `#`, and letters from non-English scripts, including Hebrew, have their own groups.
+- **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. The covers are labeled with the author here, and the group list jumps by author.
+- **New** lists books by when they arrived on the card (file date), without the recently opened books on top. Down shows the newest first.
+- **Shelf** turns each folder on the card into a shelf. It shows the list of shelves with their book counts; open one to see its books (A-Z), and press Back to return to the shelves. Books at the top of the card are under **No shelf**. Folders with the same name in different places are separate shelves. Up to 64 folders get their own shelf; books in further folders are under **No shelf**. A search on this tab is a plain title search.
 
 On a button-only device:
 
-- Use **Up/Down** or **Left/Right** to move one row at a time. Hold a direction to move a page at a time.
+- Use **Up/Down** or **Left/Right** to move one book at a time, left to right and then down the shelves. Hold a direction to move a page at a time.
 - Press **Confirm** to open the selected book.
-- Press **Back** from the book list to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the list.
+- Press **Back** from the books to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the books.
 - While the tabs are focused, hold **Confirm** to open Search.
 - In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
 
-On a touch device, tap tabs, books, and the Search icon directly. Tap an active indexed tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent view to remove it from the list. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Added** view is not grouped; tapping or long-pressing a book opens it.
+On a touch device, tap tabs, books, shelves, and the Search icon directly. Tap an active tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent or New view for options. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. Long-press a book inside a shelf to delete it.
 
 The index is created automatically the first time the Library is opened. To pick up later file changes or updated metadata, use **Settings → System → Rebuild library index**. The **Use book metadata** setting controls whether the index reads titles and authors stored inside books.
 
@@ -255,8 +276,14 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   
   - "Classic" - The original Crosspoint theme
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
-  - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
+  - "Lyra Extended" - Lyra, but showed 3 books instead of 1 on the old Home screen
+  
+  The theme styles menus and lists. It does not change the Windows 98 **[Home Screen](#31-home-screen)**.
   - "RoundedRaff" - A rounded theme with additional visual styling
+
+- **Desktop Icons**: Which icons the Windows 98 desktop shows: "All" (apps and up to three recent books), "Books Only", or "None".
+
+- **Wallpaper**: "None" (the grey desktop) or a BMP from the `/sleep` folder. The picture is scaled to cover the desktop and dithered to black and white. Only `/sleep` is listed, not `/.sleep`. This option needs PSRAM, so it appears on the X4 Pro but not on the X3 or X4.
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   
@@ -313,6 +340,8 @@ Side buttons, and Taps and gestures where supported by the device. See the
 [Controls guide](docs/controls.md) for the menu hierarchy and X4 Pro double-click actions.
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
+
+- **Touch Response** (touch devices): How quickly the first touch is noticed after a few seconds without input. "Standard (50 ms)" (default) matches earlier versions. "Fast (20 ms)" and "Fastest (10 ms)" check the touch screen more often and may use slightly more battery.
 
 - **Layout (reader only)**: Swap the order of the up and down side buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 

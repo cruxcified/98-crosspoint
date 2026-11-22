@@ -202,6 +202,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
+  // Win98 desktop icons
+  enum DESKTOP_ICONS { DESKTOP_ICONS_ALL = 0, DESKTOP_ICONS_BOOKS = 1, DESKTOP_ICONS_NONE = 2 };
+
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, COVER_GRID = 4 };
 
@@ -226,6 +229,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t vibration = VIBRATION_OFF;
   enum HAPTIC_INTENSITY { HAPTIC_LOW = 0, HAPTIC_MEDIUM = 1, HAPTIC_HIGH = 2 };
   uint8_t hapticIntensity = HAPTIC_HIGH;
+
+  // Idle input-poll interval once the device has been idle for a few seconds.
+  enum TOUCH_RESPONSE {
+    TOUCH_RESPONSE_50MS = 0,
+    TOUCH_RESPONSE_20MS = 1,
+    TOUCH_RESPONSE_10MS = 2,
+    TOUCH_RESPONSE_COUNT
+  };
 
   enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };
 
@@ -367,6 +378,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Win98 desktop: which icons show, and the wallpaper BMP path (empty = none)
+  uint8_t desktopIcons = DESKTOP_ICONS_ALL;
+  char desktopWallpaper[96] = "";
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep
@@ -394,6 +408,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t tiltPageTurn = TILT_OFF;
   // Master reader-touch toggle on boards with a touch controller.
   uint8_t touchReaderControls = TOUCH_READER_ON;
+  uint8_t touchResponse = TOUCH_RESPONSE_50MS;
   // Which gestures turn the page in each direction (PAGE_TURN_GESTURE).
   uint8_t pageTurnGesture = SWIPE_ONLY;
   uint8_t previousPageGesture = SWIPE_ONLY;
@@ -499,6 +514,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
+  unsigned long getIdleInputPollMs() const {
+    switch (touchResponse) {
+      case TOUCH_RESPONSE_20MS:
+        return 20;
+      case TOUCH_RESPONSE_10MS:
+        return 10;
+      default:
+        return 50;
+    }
+  }
   int getRefreshFrequency() const;
 };
 

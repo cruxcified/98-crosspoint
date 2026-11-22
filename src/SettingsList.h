@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "ReaderLineSpacing.h"
 #include "activities/settings/SettingsActivity.h"
 #include "components/UITheme.h"
+#include "components/Win98Wallpaper.h"
 #include "util/DictionaryRegistry.h"
 #include "util/SlideSwitch.h"
 
@@ -162,6 +164,42 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     SETTINGS.dictionaryName[sizeof(SETTINGS.dictionaryName) - 1] = '\0';
   };
 
+  return s;
+}
+
+inline constexpr char WALLPAPER_SETTING_KEY[] = "desktopWallpaper";
+// Enum indexes are uint8_t; keep the list short enough to scroll.
+inline constexpr size_t MAX_WALLPAPER_OPTIONS = 60;
+
+// Desktop wallpaper: "None" plus the BMPs in the sleep folder. The full path
+// persists in SETTINGS.desktopWallpaper (saved/loaded manually).
+inline SettingInfo buildWallpaperSetting(std::vector<std::string> names) {
+  SettingInfo s;
+  s.nameId = StrId::STR_W98_WALLPAPER;
+  s.key = WALLPAPER_SETTING_KEY;
+  s.type = SettingType::ENUM;
+  s.enumStringValues.reserve(names.size() + 1);
+  s.enumStringValues.push_back(I18N.get(StrId::STR_NONE_OPT));
+  s.enumStringValues.insert(s.enumStringValues.end(), names.begin(), names.end());
+  s.category = StrId::STR_CAT_DISPLAY;
+
+  // One list shared by the getter and setter.
+  const auto shared = std::make_shared<const std::vector<std::string>>(std::move(names));
+  const auto pathOf = [](const std::string& name) { return std::string(win98::WALLPAPER_DIR) + "/" + name; };
+  s.valueGetter = [shared, pathOf]() -> uint8_t {
+    for (size_t i = 0; i < shared->size(); i++) {
+      if (pathOf((*shared)[i]) == SETTINGS.desktopWallpaper) return static_cast<uint8_t>(i + 1);
+    }
+    return 0;  // "None", also when the stored file is gone
+  };
+  s.valueSetter = [shared, pathOf](uint8_t v) {
+    if (v == 0 || v > shared->size()) {
+      SETTINGS.desktopWallpaper[0] = '\0';
+      return;
+    }
+    strncpy(SETTINGS.desktopWallpaper, pathOf((*shared)[v - 1]).c_str(), sizeof(SETTINGS.desktopWallpaper) - 1);
+    SETTINGS.desktopWallpaper[sizeof(SETTINGS.desktopWallpaper) - 1] = '\0';
+  };
   return s;
 }
 
@@ -365,9 +403,18 @@ void forEachSetting(const SdCardFontRegistry* registry, const std::vector<Dictio
       visitDictionary();
     }
     if (dictionaryPending && s.category == StrId::STR_CAT_CONTROLS) visitDictionary();
-    if (!wants(s.key)) return;
-    buildFontOptions(s, registry);
-    visit(s);
+    if (wants(s.key)) {
+      buildFontOptions(s, registry);
+      visit(s);
+    }
+    // The wallpaper options follow Desktop Icons; the sleep folder is listed
+    // only when the entry is wanted.
+    if (s.valuePtr == &CrossPointSettings::desktopIcons && wants(WALLPAPER_SETTING_KEY) &&
+        win98::wallpaperSupported()) {
+      SettingInfo wallpaper = buildWallpaperSetting(
+          win98::listWallpapers(MAX_WALLPAPER_OPTIONS, sizeof(CrossPointSettings::desktopWallpaper)));
+      visit(wallpaper);
+    }
   };
   forEachBaseSetting(each);
   if (dictionaryPending) visitDictionary();
@@ -377,8 +424,8 @@ void forEachSetting(const SdCardFontRegistry* registry, const std::vector<Dictio
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
                                                 const std::vector<DictionaryEntry>* dictionaries = nullptr) {
   std::vector<SettingInfo> v;
-  // Room for every base entry and the dictionary, so the list never reallocates.
-  v.reserve(countBaseSettings() + (dictionaries && !dictionaries->empty() ? 1 : 0));
+  // Room for every base entry, the wallpaper and the dictionary, so the list never reallocates.
+  v.reserve(countBaseSettings() + 1 + (dictionaries && !dictionaries->empty() ? 1 : 0));
   forEachSetting(
       registry, dictionaries, [](const char*) { return true; }, [&v](SettingInfo& s) { v.push_back(std::move(s)); });
   return v;

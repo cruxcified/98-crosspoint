@@ -1787,6 +1787,15 @@ void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const 
   display.displayBufferAsync(refreshMode);
 }
 
+void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, width, height, panelWidth, panelHeight);
+  if (promotedRefreshPending_ || !mem.valid) {
+    displayBuffer(HalDisplay::FAST_REFRESH);
+    return;
+  }
+  display.displayWindow(mem.x, mem.y, mem.w, mem.h, fadingFix);
+}
+
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }

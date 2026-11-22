@@ -50,6 +50,10 @@ class Activity {
   virtual bool requiresExclusiveStorageLoop() const { return false; }
   virtual bool isReaderActivity() const { return false; }
   virtual bool acceptsRemoteInput() const { return false; }
+  // A Bluetooth keyboard types into this screen: printable ASCII, '\n' for Enter,
+  // '\b' for Backspace. typeKey returns false when the key was not taken.
+  virtual bool acceptsTypedInput() const { return false; }
+  virtual bool typeKey(char /*ch*/) { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
   virtual bool isHomeActivity() const { return false; }

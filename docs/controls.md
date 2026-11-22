@@ -8,7 +8,7 @@ options depend on the device.
 - **Front buttons** contains remapping, orientation, Back behavior, and the two
   long-press settings at the bottom.
 - **Side buttons** contains the reader layout, orientation, and page-turn long press.
-- **Taps and gestures** contains **Touch controls while reading** and the page/menu gestures.
+- **Taps and gestures** contains **Touch controls while reading**, the page/menu gestures, and **Touch Response**.
 
 **Page turn long press** is shared by Front buttons and Side buttons. Changing it
 in either group changes the same setting.

@@ -105,6 +105,10 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
   }
+  // Wallpaper path — dynamic options in SettingsList, save manually
+  if (desktopWallpaper[0] != '\0') {
+    doc["desktopWallpaper"] = desktopWallpaper;
+  }
   // The displayed option list varies by board, so this setting uses a dynamic
   // display-index mapping and is skipped by the generic persistence loop.
   doc["longPressMenuFunction"] = longPressMenuFunction;
@@ -298,6 +302,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   if (storedFontFamily != STORED_NOTOSANS) needsResave = true;
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+  copyToField(desktopWallpaper, doc["desktopWallpaper"] | "", sizeof(desktopWallpaper));
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
     language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
