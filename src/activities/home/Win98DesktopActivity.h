@@ -36,6 +36,9 @@ class Win98DesktopActivity final : public Activity {
 
   static constexpr int MAX_DESKTOP_BOOKS = 3;
 
+  // Per-app Display settings; Settings and books always show.
+  static bool shownOnDesktop(Action action);
+
   struct Box {
     int x = 0;
     int y = 0;

@@ -114,14 +114,14 @@ The Home screen is the main entry point to the firmware. It looks like a Windows
 * **My Computer** opens **[Browse Files](#33-browse-files-screen)**.
 * **My Books** opens the **[Library](#34-library-screen)**.
 * **Notepad** opens the Notepad app (notes are saved in `/notes`).
-* **Network Neighborhood** opens **[File Transfer](#35-file-transfer-screen)**.
-* **Control Panel** opens **[Settings](#36-settings)**.
+* **Network** opens **[File Transfer](#35-file-transfer-screen)**.
+* **Settings** (the gear icon) opens **[Settings](#36-settings)**.
 * **Plugins** or **OPDS Browser** appears when enabled.
 * Up to three recently read books appear after the apps and open **[Reading Mode](#4-reading-mode)**.
 
 You can also move the selection with **Up** and **Down** and open it with **Confirm**. **Back** resumes the most recent book.
 
-**Desktop Icons** and **Wallpaper** in **Settings → Display** change the desktop. With Desktop Icons set to "Books Only", only the recent books show and the apps are in the Start menu. With "None", the desktop is empty and **Confirm** opens the Start menu.
+**Desktop Icons** and **Wallpaper** in **Settings → Display** change the desktop. With Desktop Icons set to "Books Only", only the recent books show and the apps are in the Start menu. With "None", the desktop is empty and **Confirm** opens the Start menu. With "All", the **Show** toggles in the same menu hide single apps from the desktop. Hidden apps stay in the Start menu.
 
 Every menu and screen uses the VCR OSD Mono pixel font. Characters it does not have (for example Cyrillic, Greek, Hebrew or Arabic) are drawn in Ubuntu. Book text keeps the reader font you chose.
 
@@ -282,6 +282,8 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "RoundedRaff" - A rounded theme with additional visual styling
 
 - **Desktop Icons**: Which icons the Windows 98 desktop shows: "All" (apps and up to three recent books), "Books Only", or "None".
+
+- **Show My Computer**, **Show My Books**, **Show Notepad**, **Show Network**, **Show Plugins**: Hide single app icons from the desktop. They apply only when Desktop Icons is "All". Settings and recent books always show, and the Start menu still lists every app. **Show Plugins** also hides the OPDS Browser icon when it takes the Plugins place.
 
 - **Wallpaper**: "None" (the grey desktop) or a BMP from the `/sleep` folder. The picture is scaled to cover the desktop and dithered to black and white. Only `/sleep` is listed, not `/.sleep`. This option needs PSRAM, so it appears on the X4 Pro but not on the X3 or X4.
 

@@ -22,9 +22,9 @@
 #include "components/icons/blocks.h"
 #include "components/icons/book.h"
 #include "components/icons/computer.h"
+#include "components/icons/gear.h"
 #include "components/icons/library.h"
 #include "components/icons/notepad.h"
-#include "components/icons/settings2.h"
 #include "components/icons/transfer.h"
 #include "fontIds.h"
 
@@ -116,6 +116,24 @@ bool formatClock(char* buf, const size_t size) {
 
 }  // namespace
 
+bool Win98DesktopActivity::shownOnDesktop(const Action action) {
+  switch (action) {
+    case Action::Files:
+      return SETTINGS.desktopShowComputer != 0;
+    case Action::Library:
+      return SETTINGS.desktopShowLibrary != 0;
+    case Action::Notepad:
+      return SETTINGS.desktopShowNotepad != 0;
+    case Action::Transfer:
+      return SETTINGS.desktopShowNetwork != 0;
+    case Action::Plugins:
+    case Action::Opds:
+      return SETTINGS.desktopShowPlugins != 0;
+    default:
+      return true;
+  }
+}
+
 void Win98DesktopActivity::onEnter() {
   Activity::onEnter();
 
@@ -126,7 +144,7 @@ void Win98DesktopActivity::onEnter() {
   menuItems.push_back({Action::Library, LibraryIcon, tr(STR_W98_MY_BOOKS)});
   menuItems.push_back({Action::Notepad, NotepadIcon, tr(STR_NOTEPAD_TITLE)});
   menuItems.push_back({Action::Transfer, TransferIcon, tr(STR_W98_NETWORK)});
-  menuItems.push_back({Action::Settings, Settings2Icon, tr(STR_W98_CONTROL_PANEL)});
+  menuItems.push_back({Action::Settings, GearIcon, tr(STR_SETTINGS_TITLE)});
   // Same rule as HomeActivity::slotItem(): Plugins wins over OPDS.
   if (SETTINGS.pluginsEnabled != 0) {
     menuItems.push_back({Action::Plugins, BlocksIcon, tr(STR_PLUGINS)});
@@ -138,7 +156,9 @@ void Win98DesktopActivity::onEnter() {
   desktopItems.clear();
   desktopItems.reserve(menuItems.size() + MAX_DESKTOP_BOOKS);
   if (SETTINGS.desktopIcons == CrossPointSettings::DESKTOP_ICONS_ALL) {
-    desktopItems.assign(menuItems.begin(), menuItems.end());
+    for (const Item& item : menuItems) {
+      if (shownOnDesktop(item.action)) desktopItems.push_back(item);
+    }
   }
   const bool showBooks = SETTINGS.desktopIcons != CrossPointSettings::DESKTOP_ICONS_NONE;
   bookCount = 0;
