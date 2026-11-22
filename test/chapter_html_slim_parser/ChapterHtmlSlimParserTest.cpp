@@ -327,30 +327,33 @@ TEST_F(ChapterHtmlSlimParserTest, UnequalTableCellsAndRubySurvivePageBreaks) {
 
 TEST(ReaderFontSizes, BuiltinVariantsStayInFamilyAndRespectSizeBounds) {
   for (const auto& family : {
-           std::array{NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
+           std::array{NOTOSANS_10_FONT_ID, NOTOSANS_11_FONT_ID, NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID,
+                      NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
        }) {
-    EXPECT_EQ(builtinReaderFontVariant(family[1], 1.0f), family[1]);
-    EXPECT_EQ(builtinReaderFontVariant(family[1], 2.0f), family[3]);
-    EXPECT_EQ(builtinReaderFontVariant(family[1], 1.17f), family[2]);
-    EXPECT_EQ(builtinReaderFontVariant(family[1], 0.83f), family[0]);
-    EXPECT_EQ(builtinReaderFontVariant(family[3], 0.9f), family[2]);
+    EXPECT_EQ(builtinReaderFontVariant(family[3], 1.0f), family[3]);
+    EXPECT_EQ(builtinReaderFontVariant(family[3], 2.0f), family[5]);
+    EXPECT_EQ(builtinReaderFontVariant(family[3], 1.17f), family[4]);
+    EXPECT_EQ(builtinReaderFontVariant(family[3], 0.83f), family[1]);
+    EXPECT_EQ(builtinReaderFontVariant(family[2], 0.83f), family[0]);
+    EXPECT_EQ(builtinReaderFontVariant(family[5], 0.9f), family[4]);
     EXPECT_EQ(builtinReaderFontVariant(family[0], 0.5f), family[0]);
-    EXPECT_EQ(builtinReaderFontVariant(family[3], 3.0f), family[3]);
-    EXPECT_EQ(builtinReaderFontVariant(family[0], 1.25f), family[1]);  // ties keep the smaller size
+    EXPECT_EQ(builtinReaderFontVariant(family[5], 3.0f), family[5]);
+    EXPECT_EQ(builtinReaderFontVariant(family[2], 1.25f), family[3]);  // ties keep the smaller size
   }
   EXPECT_EQ(builtinReaderFontVariant(12345, 2.0f), 0);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleUsesProviderAndFallsBackToBodyFont) {
   installBuiltinVariants(renderer);
-  for (const int id : {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID}) {
+  for (const int id : {NOTOSANS_10_FONT_ID, NOTOSANS_11_FONT_ID, NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID,
+                       NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID}) {
     renderer.fontMap.emplace(id, EpdFontFamily(12, nullptr));
   }
   parser.fontId = NOTOSANS_14_FONT_ID;
   EXPECT_EQ(parser.fontIdForScale(1.0f), NOTOSANS_14_FONT_ID);
   EXPECT_EQ(parser.fontIdForScale(2.0f), NOTOSANS_18_FONT_ID);
   EXPECT_EQ(parser.fontIdForScale(1.17f), NOTOSANS_16_FONT_ID);
-  EXPECT_EQ(parser.fontIdForScale(0.83f), NOTOSANS_12_FONT_ID);
+  EXPECT_EQ(parser.fontIdForScale(0.83f), NOTOSANS_11_FONT_ID);
   EXPECT_EQ(parser.fontIdForScale(0.96f), NOTOSANS_14_FONT_ID);
   EXPECT_EQ(parser.fontIdForScale(1.04f), NOTOSANS_14_FONT_ID);
   parser.fontId = 54321;  // family not registered with the renderer
@@ -1348,7 +1351,8 @@ class ChapterInlineSizeTest : public ChapterBlockDecorationTest {
   void SetUp() override {
     ChapterBlockDecorationTest::SetUp();
     installBuiltinVariants(renderer);
-    for (const int id : {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID}) {
+    for (const int id : {NOTOSANS_10_FONT_ID, NOTOSANS_11_FONT_ID, NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID,
+                         NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID}) {
       renderer.fontMap.emplace(id, EpdFontFamily(12, nullptr));
     }
     parser.fontId = NOTOSANS_14_FONT_ID;
@@ -1402,7 +1406,7 @@ TEST_F(ChapterInlineSizeTest, NestedSpansCompoundTheirSizes) {
   close("span");
   close("span");
   close("p");
-  EXPECT_EQ(firstLineFontId(), NOTOSANS_12_FONT_ID);
+  EXPECT_EQ(firstLineFontId(), NOTOSANS_11_FONT_ID);
 }
 
 TEST_F(ChapterInlineSizeTest, TextAfterTheSpanKeepsBodySize) {
@@ -1435,7 +1439,7 @@ TEST_F(ChapterInlineSizeTest, MixedSizesWithinALineSurviveTheCache) {
   const auto& block = *static_cast<const PageLine*>(lines[0])->getBlock();
   ASSERT_EQ(block.wordCount(), 4);
   EXPECT_EQ(block.wordFontId(0, NOTOSANS_14_FONT_ID), NOTOSANS_14_FONT_ID);
-  EXPECT_EQ(block.wordFontId(1, NOTOSANS_14_FONT_ID), NOTOSANS_12_FONT_ID);
+  EXPECT_EQ(block.wordFontId(1, NOTOSANS_14_FONT_ID), NOTOSANS_11_FONT_ID);
   EXPECT_EQ(block.wordFontId(3, NOTOSANS_14_FONT_ID), NOTOSANS_16_FONT_ID);
 
   const auto path = std::filesystem::temp_directory_path() / "crosspoint-word-fonts.bin";
@@ -1810,9 +1814,9 @@ TEST_F(ChapterInlineSizeTest, NestedRemResetKeepsItsFontInsideSizedParagraph) {
   ASSERT_EQ(lines.size(), 1u);
   const auto& block = *static_cast<const PageLine*>(lines[0])->getBlock();
   ASSERT_EQ(block.wordCount(), 3u);
-  EXPECT_EQ(block.wordFontId(0, parser.fontId), NOTOSANS_12_FONT_ID);
+  EXPECT_EQ(block.wordFontId(0, parser.fontId), NOTOSANS_11_FONT_ID);
   EXPECT_EQ(block.wordFontId(1, parser.fontId), NOTOSANS_14_FONT_ID);
-  EXPECT_EQ(block.wordFontId(2, parser.fontId), NOTOSANS_12_FONT_ID);
+  EXPECT_EQ(block.wordFontId(2, parser.fontId), NOTOSANS_11_FONT_ID);
 }
 
 TEST_F(ChapterInlineSizeTest, DescendantFontSizeResolvesAfterAncestorSize) {
@@ -1829,7 +1833,7 @@ TEST_F(ChapterInlineSizeTest, DescendantFontSizeResolvesAfterAncestorSize) {
   close("body");
   const auto lines = elementsWithTag(TAG_PageLine);
   ASSERT_EQ(lines.size(), 3u);
-  const int expected[] = {NOTOSANS_16_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_12_FONT_ID};
+  const int expected[] = {NOTOSANS_16_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_11_FONT_ID};
   for (size_t i = 0; i < lines.size(); ++i) {
     const auto& block = *static_cast<const PageLine*>(lines[i])->getBlock();
     EXPECT_EQ(block.wordFontId(0, NOTOSANS_14_FONT_ID), expected[i]);
@@ -1850,7 +1854,7 @@ TEST_F(ChapterInlineSizeTest, SpecializedInlineTagsKeepTheirFontSize) {
     const auto lines = elementsWithTag(TAG_PageLine);
     const auto& block = *static_cast<const PageLine*>(lines.back())->getBlock();
     ASSERT_EQ(block.wordCount(), 3u);
-    EXPECT_EQ(block.wordFontId(1, NOTOSANS_14_FONT_ID), NOTOSANS_12_FONT_ID);
+    EXPECT_EQ(block.wordFontId(1, NOTOSANS_14_FONT_ID), NOTOSANS_11_FONT_ID);
     EXPECT_EQ(block.wordFontId(2, NOTOSANS_14_FONT_ID), NOTOSANS_14_FONT_ID);
   }
 }
@@ -1917,7 +1921,7 @@ TEST_F(ChapterInlineSizeTest, GridCellsResolveBlockAndWordFonts) {
   const auto& large = *static_cast<const PageLine*>(lines[0])->getBlock();
   const auto& small = *static_cast<const PageLine*>(lines[1])->getBlock();
   EXPECT_EQ(large.wordFontId(0, NOTOSANS_14_FONT_ID), NOTOSANS_16_FONT_ID);
-  EXPECT_EQ(small.wordFontId(0, NOTOSANS_14_FONT_ID), NOTOSANS_12_FONT_ID);
+  EXPECT_EQ(small.wordFontId(0, NOTOSANS_14_FONT_ID), NOTOSANS_11_FONT_ID);
 }
 
 TEST_F(ChapterBlockDecorationTest, BorderScopeExcludesPrecedingParentText) {

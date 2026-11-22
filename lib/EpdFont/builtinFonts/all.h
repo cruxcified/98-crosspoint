@@ -1,5 +1,13 @@
 #pragma once
 
+#include <builtinFonts/notosans_10_bold.h>
+#include <builtinFonts/notosans_10_bolditalic.h>
+#include <builtinFonts/notosans_10_italic.h>
+#include <builtinFonts/notosans_10_regular.h>
+#include <builtinFonts/notosans_11_bold.h>
+#include <builtinFonts/notosans_11_bolditalic.h>
+#include <builtinFonts/notosans_11_italic.h>
+#include <builtinFonts/notosans_11_regular.h>
 #include <builtinFonts/notosans_12_bold.h>
 #include <builtinFonts/notosans_12_bolditalic.h>
 #include <builtinFonts/notosans_12_italic.h>
