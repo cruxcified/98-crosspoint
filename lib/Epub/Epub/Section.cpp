@@ -83,7 +83,8 @@ namespace {
 // v73: TrueType vector fonts load and advance .notdef for missing glyphs.
 // v74: TrueType advances defer rounding until pixel placement.
 // v75: Headings are not hyphenated.
-constexpr uint8_t SECTION_FILE_VERSION = 75;
+// v76: Built-in 10/11 pt sizes change which font small inline text uses.
+constexpr uint8_t SECTION_FILE_VERSION = 76;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

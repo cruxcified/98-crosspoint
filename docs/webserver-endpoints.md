@@ -253,12 +253,13 @@ Example item:
   "name": "Reader Font Size",
   "category": "Reader",
   "type": "enum",
-  "value": 1,
-  "options": ["12 pt", "14 pt", "16 pt", "18 pt"]
+  "value": 3,
+  "options": ["10 pt", "11 pt", "12 pt", "14 pt", "16 pt", "18 pt"]
 }
 ```
 
-`value` is always an index into `options`, never the option's text. The
+`value` is always an index into `options`, never the option's text. Read
+`options` rather than hard-coding an index. The
 `fontSize` options depend on the selected family. A `.cpfont` family installed
 at 10/12/14 pt offers those three sizes. TTF/OTF/TTC families offer the
 standard 12/14/16/18 pt sizes. The `fontFamily` and `dictionaryName` options
