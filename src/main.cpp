@@ -82,6 +82,18 @@ EpdFont notosans14BoldItalicFont(&notosans_14_bolditalic);
 EpdFontFamily notosans14FontFamily(14, &notosans14RegularFont, &notosans14BoldFont, &notosans14ItalicFont,
                                    &notosans14BoldItalicFont);
 #ifndef OMIT_FONTS
+EpdFont notosans10RegularFont(&notosans_10_regular);
+EpdFont notosans10BoldFont(&notosans_10_bold);
+EpdFont notosans10ItalicFont(&notosans_10_italic);
+EpdFont notosans10BoldItalicFont(&notosans_10_bolditalic);
+EpdFontFamily notosans10FontFamily(10, &notosans10RegularFont, &notosans10BoldFont, &notosans10ItalicFont,
+                                   &notosans10BoldItalicFont);
+EpdFont notosans11RegularFont(&notosans_11_regular);
+EpdFont notosans11BoldFont(&notosans_11_bold);
+EpdFont notosans11ItalicFont(&notosans_11_italic);
+EpdFont notosans11BoldItalicFont(&notosans_11_bolditalic);
+EpdFontFamily notosans11FontFamily(11, &notosans11RegularFont, &notosans11BoldFont, &notosans11ItalicFont,
+                                   &notosans11BoldItalicFont);
 EpdFont notosans12RegularFont(&notosans_12_regular);
 EpdFont notosans12BoldFont(&notosans_12_bold);
 EpdFont notosans12ItalicFont(&notosans_12_italic);
@@ -538,6 +550,8 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
 #ifndef OMIT_FONTS
+  renderer.insertFont(NOTOSANS_10_FONT_ID, notosans10FontFamily);
+  renderer.insertFont(NOTOSANS_11_FONT_ID, notosans11FontFamily);
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
