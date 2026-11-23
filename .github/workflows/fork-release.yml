@@ -1,0 +1,79 @@
+name: CrossPoint98 OTA release
+
+# Each push to develop builds X4 Pro firmware and publishes it as the latest
+# release. "Check for updates" on the device reads that release (OtaUpdater.cpp).
+# The tag is <version>-w98.<run number>; the run number orders releases, so
+# do not rename this file (a renamed workflow restarts its run numbers at 1).
+# Re-running a finished run fails at publish because its tag already exists;
+# push again or start a new run instead. Releases made with GITHUB_TOKEN do
+# not trigger release.yml, so the upstream multi-board build stays idle.
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-x4pro:
+    # Manual runs publish too, so only allow them from develop.
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      PIO_ENV: x4pro-w98_release
+      CROSSPOINT_W98_BUILD: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          pio pkg install -e "$PIO_ENV"
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+
+      - name: Build firmware
+        run: pio run -e "$PIO_ENV" -j1
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base="$(sed -n 's/^version = //p' platformio.ini | head -n1)"
+          tag="${base}-w98.${CROSSPOINT_W98_BUILD}"
+          asset="crosspoint-${tag}-x4pro.bin"
+          cp ".pio/build/${PIO_ENV}/firmware.bin" "$asset"
+          notes="Built from ${GITHUB_SHA::7}: $(git log -1 --format=%s)"
+          gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "CrossPoint98 $tag" --notes "$notes" --latest
