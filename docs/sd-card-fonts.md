@@ -116,8 +116,10 @@ CrossPoint's built-in fallback-detection codepoints — see `kFallbackProbes` in
 `src/SdCardFontSystem.cpp` for the current list. A script outside that list
 gets no UI fallback even with the correct `.cpfont` sizes present.
 
-For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships,
-so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
+For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships
+plus the built-in sizes (10, 11, 12, 14, 16, 18 pt). A built-in size the family does not
+ship is drawn in the built-in Noto Sans, so read a non-Latin family at a size it includes.
+A family built at 8,10,12,14,16,18 offers all of its sizes as reading sizes — the UI
 sizes are not hidden from the list. Reading at 8 pt is your call; if you would
 rather not see the small sizes there, convert two families (one with the UI
 sizes for fallback, one with only the reading sizes you want).
@@ -146,7 +148,8 @@ What this means in practice:
   `三体 Vol.1` renders entirely in the SD font (including the Latin part). If
   that SD font is a `Mono` family, the Latin portion will appear half/full
   width.
-- If no SD font is selected (a built-in reading font is active), there is no
+- If no SD font is selected (a built-in reading font is active), or the
+  selected family does not ship the chosen reading size, there is no
   fallback and the UI again shows boxes for non-Latin text — pick an SD font
   covering that script to restore it.
 

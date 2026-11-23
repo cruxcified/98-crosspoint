@@ -45,7 +45,7 @@ SdCardFontSystem::~SdCardFontSystem() = default;
 
 namespace {
 
-// Point the reader font size at a size the given family actually ships, and
+// Point the reader font size at a size the given family offers, and
 // persist the change so the settings UI and the loaded font never disagree.
 // Guarded by the value-change check: a no-op snap must not write SPIFFS.
 void snapFontPointSizeTo(const uint8_t availablePointSize) {
@@ -108,31 +108,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   SETTINGS.sdFontResolverCtx = this;
 
   // If user has a saved SD font selection, load it
-  if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
-    if (family) {
-#if CROSSPOINT_VECTOR_FONTS
-      if (family->vector) {
-        // Vector (.ttf/.otf) families load through the FreeInkFont path; the
-        // .cpfont manager below rejects them ("Invalid magic bytes") and would
-        // wipe the user's selection on every boot. loadTtfFamily keeps the
-        // selection on transient failures and registers UI fallbacks itself.
-        loadTtfFamily(*family, renderer, /*registryWasDirty=*/false);
-      } else
-#endif
-          if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
-        snapFontPointSizeTo(manager_.currentPointSize());
-        setupUiFallbacks(renderer);
-        LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
-      } else {
-        LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
-        SETTINGS.clearSdFontFamily();
-      }
-    } else {
-      LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
-      SETTINGS.clearSdFontFamily();
-    }
-  }
+  if (SETTINGS.sdFontFamilyName[0] != '\0') ensureLoaded(renderer);
 
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
 }
@@ -179,44 +155,37 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     return;
   }
 
-  // Reload if family changed OR if the user-selected size maps to a
-  // different file than what's currently loaded OR if the registry was
-  // just rediscovered (file may have been replaced on disk).
-  bool familyMatches = (currentFamily == wantedFamily);
-  if (familyMatches) {
-    const auto* family = registry_.findFamily(wantedFamily);
-    if (!family) {
-      LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
-      unloadCpfonts(renderer);
-      SETTINGS.clearSdFontFamily();
-      return;
-    }
-    const auto* selected = family->findNearestSize(SETTINGS.fontPointSize);
-    const uint8_t wantedPt = selected ? selected->pointSize : 0;
-    // Snap before the early return: the wanted size can already be loaded while
-    // the setting still names a size this family does not ship.
-    snapFontPointSizeTo(wantedPt);
-    if (!registryWasDirty && wantedPt == manager_.currentPointSize()) return;
-    LOG_DBG("SDFS", "Reloading %s: size %u -> %u%s", wantedFamily, manager_.currentPointSize(), wantedPt,
-            registryWasDirty ? " [registry dirty]" : "");
-  }
-
-  if (!currentFamily.empty()) {
-    unloadCpfonts(renderer);
-  }
-
   const auto* family = registry_.findFamily(wantedFamily);
-  if (family) {
-    if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
-      snapFontPointSizeTo(manager_.currentPointSize());
-      setupUiFallbacks(renderer);
-      LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);
-    } else {
-      LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
-      SETTINGS.clearSdFontFamily();
-    }
-  } else {
+  if (!family) {
     LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
+    if (!currentFamily.empty()) unloadCpfonts(renderer);
+    SETTINGS.clearSdFontFamily();
+    return;
+  }
+
+  // Keep the size inside this family's list (its own sizes plus the built-in
+  // ones). A size the family does not ship renders in the built-in font, so no
+  // .cpfont is loaded for it and getReaderFontId() falls through to built-in.
+  if (!family->hasSize(SETTINGS.fontPointSize)) {
+    snapFontPointSizeTo(snapToNearestPointSize(readerFontPointSizes(&registry_, wantedFamily), SETTINGS.fontPointSize));
+  }
+  if (!family->hasSize(SETTINGS.fontPointSize)) {
+    if (!currentFamily.empty()) unloadCpfonts(renderer);
+    return;
+  }
+
+  // Reload if the family or size changed, or if the registry was just
+  // rediscovered (the file may have been replaced on disk).
+  if (!registryWasDirty && currentFamily == wantedFamily && manager_.currentPointSize() == SETTINGS.fontPointSize) {
+    return;
+  }
+  if (!currentFamily.empty()) unloadCpfonts(renderer);
+
+  if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
+    setupUiFallbacks(renderer);
+    LOG_DBG("SDFS", "Loaded SD font family: %s %upt", wantedFamily, SETTINGS.fontPointSize);
+  } else {
+    LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
     SETTINGS.clearSdFontFamily();
   }
 }
@@ -397,9 +366,10 @@ int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*
   // A loaded vector (.ttf) family answers first — it isn't in the .cpfont manager.
   if (ttfFontId_ != 0 && familyName && ttfFamily_ == familyName) return ttfFontId_;
 #endif
-  // The manager holds exactly one reader-size font, already selected for
-  // SETTINGS.fontPointSize, so the size argument is implicit — always return
-  // that font's ID. ensureLoaded() must have run for the current settings first.
+  // The manager holds at most one reader-size font, already selected for
+  // SETTINGS.fontPointSize, so the size argument is implicit. It holds none when
+  // the family lacks that size; 0 then means "use the built-in font at this
+  // size". ensureLoaded() must have run for the current settings first.
   return manager_.getFontId(familyName);
 }
 

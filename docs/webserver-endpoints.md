@@ -260,8 +260,8 @@ Example item:
 
 `value` is always an index into `options`, never the option's text. Read
 `options` rather than hard-coding an index. The
-`fontSize` options depend on the selected family. A `.cpfont` family installed
-at 10/12/14 pt offers those three sizes. TTF/OTF/TTC families offer the
+`fontSize` options depend on the selected family. A `.cpfont` family offers
+its installed sizes plus the built-in 10/11/12/14/16/18 pt. TTF/OTF/TTC families offer the
 standard 12/14/16/18 pt sizes. The `fontFamily` and `dictionaryName` options
 also depend on the SD card contents.
 

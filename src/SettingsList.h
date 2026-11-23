@@ -81,9 +81,9 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
-// Build the font size setting dynamically: the options are the point sizes the
-// active family actually ships, so an SD family built at 10/12/14 offers three
-// sizes and a family built at 8..18 offers six. The selected point size persists
+// Build the font size setting dynamically: the options are the point sizes from
+// readerFontPointSizes(), so an SD family built at 8/9 also offers 8 and 9 pt
+// on top of the built-in sizes. The selected point size persists
 // in SETTINGS.fontPointSize (saved/loaded manually in CrossPointSettings::
 // toJson/fromJson — the generic loop skips dynamic entries), while the ENUM
 // contract shared with the web UI stays index-based.
