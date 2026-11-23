@@ -51,8 +51,8 @@ constexpr int MENU_BORDER = 3;
 
 constexpr unsigned long CLOCK_CHECK_MS = 5000;
 
-// The UI font slots hold the VCR OSD Mono pixel font (see main.cpp).
-constexpr int DESKTOP_FONT = UI_10_FONT_ID;
+// VCR OSD Mono pixel font, used only on the desktop (see main.cpp).
+constexpr int DESKTOP_FONT = DESKTOP_FONT_ID;
 
 // Icons are 1-bpp, MSB first, 0 = ink, stored rotated as GfxRenderer::drawIcon
 // expects: screen pixel (sx, sy) is row 31 - sx, column sy.

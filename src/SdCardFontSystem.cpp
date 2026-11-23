@@ -69,6 +69,12 @@ constexpr UiFontSize kUiFontSizes[] = {
     {UI_12_FONT_ID, 12},
 };
 
+// The desktop font is 10 pt too, so it shares the UI_10 fallback.
+void setUiFallback(GfxRenderer& renderer, const int uiFontId, const int fallbackId) {
+  renderer.setFallbackFont(uiFontId, fallbackId);
+  if (uiFontId == UI_10_FONT_ID) renderer.setFallbackFont(DESKTOP_FONT_ID, fallbackId);
+}
+
 }  // namespace
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
@@ -264,7 +270,7 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
     const int id = variantFontId(manager_.getFontId(familyName), ui.pointSize);
     const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize, id);
     if (sdFontId != 0) {
-      renderer.setFallbackFont(ui.fontId, sdFontId);
+      setUiFallback(renderer, ui.fontId, sdFontId);
     } else {
       LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
     }
@@ -605,7 +611,7 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
     const int id = computeTtfFontId((ttfFamily_ + "\x01ui").c_str(), ui.pointSize);
     renderer.insertFont(id, f->family());
     renderer.registerTtfFont(id, f.get());
-    renderer.setFallbackFont(ui.fontId, id);
+    setUiFallback(renderer, ui.fontId, id);
     ttfUiIds_.push_back(id);
     ttfUi_.push_back(std::move(f));
   }
