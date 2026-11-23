@@ -44,6 +44,7 @@ class ActivityManager {
   std::unique_ptr<Activity> currentActivity;
 
   void exitActivity(const RenderLock& lock);
+  bool cleansDesktopSwitch(const Activity& next) const;
 
   // Pending activity to be launched on next loop iteration
   std::unique_ptr<Activity> pendingActivity;
