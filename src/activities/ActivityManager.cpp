@@ -177,6 +177,9 @@ void ActivityManager::loop() {
 
       if (stackActivities.empty()) {
         LOG_DBG("ACT", "No more activities on stack, going home");
+        // Always a switch to the desktop (see cleansDesktopSwitch()); the old
+        // screen is already gone, so that check cannot run here.
+        renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
         lock.unlock();  // goHome may acquire its own lock
         goHome();
         continue;  // Will launch goHome immediately
@@ -210,6 +213,9 @@ void ActivityManager::loop() {
       RenderLock lock;
 
       if (pendingAction == PendingAction::Replace || pendingAction == PendingAction::ReplaceForSleep) {
+        if (pendingAction == PendingAction::Replace && cleansDesktopSwitch(*pendingActivity)) {
+          renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
+        }
         // Destroy the current activity
         exitActivity(lock);
         // Clear the stack
@@ -244,6 +250,14 @@ void ActivityManager::loop() {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
     }
   }
+}
+
+// The dithered Win98 desktop ghosts badly under fast refreshes, so the first
+// frame after moving to or from it takes a half refresh. Other screen changes keep the
+// default refresh. The reader picks its own first refresh.
+bool ActivityManager::cleansDesktopSwitch(const Activity& next) const {
+  if (!currentActivity || next.isReaderActivity()) return false;
+  return currentActivity->isHomeActivity() || next.isHomeActivity();
 }
 
 void ActivityManager::exitActivity(const RenderLock& lock) {
