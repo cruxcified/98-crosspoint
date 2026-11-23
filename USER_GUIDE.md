@@ -299,7 +299,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Noto Sans" (default) - Google's sans-serif font
   - Installed SD card families
 
-- **Reader Font Size**: Choose a point size. The built-in font offers 10, 11, 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
+- **Reader Font Size**: Choose a point size. The built-in font offers 10, 11, 12, 14, 16, and 18 pt. A `.cpfont` family offers its installed sizes plus the built-in sizes. A size the family does not include is shown in Noto Sans.
 
 - **Reader Line Spacing**: Space added between lines, as a percentage of font size: 0%, +10%, +20% (default), +30%, +45%, +60%, or +75%.
 

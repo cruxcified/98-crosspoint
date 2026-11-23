@@ -1,6 +1,7 @@
 add_executable(SdFontRegistryTest
   SdFontRegistryTest.cpp
   ${REPO_ROOT}/lib/EpdFont/SdCardFontRegistry.cpp
+  ${REPO_ROOT}/src/ReaderFontSizes.cpp
 )
 # The library builder's in-memory HalStorage already enumerates directories,
 # which is all the registry scan needs. Its directory is listed last so the
@@ -8,6 +9,7 @@ add_executable(SdFontRegistryTest
 target_include_directories(SdFontRegistryTest PRIVATE
   ${REPO_ROOT}/lib/EpdFont
   ${REPO_ROOT}/lib/Memory
+  ${REPO_ROOT}/src
   ${REPO_ROOT}/test/library_builder/stubs
 )
 target_link_libraries(SdFontRegistryTest PRIVATE crosspoint_test_common GTest::gtest_main)

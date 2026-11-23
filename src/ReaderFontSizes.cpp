@@ -1,5 +1,6 @@
 #include "ReaderFontSizes.h"
 
+#include <algorithm>
 #include <iterator>
 
 std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, const char* sdFamilyName) {
@@ -8,8 +9,15 @@ std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, co
       if (family->vector) {
         return {std::begin(VECTOR_READER_POINT_SIZES), std::end(VECTOR_READER_POINT_SIZES)};
       }
+      // Sizes the family lacks render in the built-in font, so every family
+      // offers at least the built-in sizes.
       auto sizes = family->availableSizes();
-      if (!sizes.empty()) return sizes;
+      if (!sizes.empty()) {
+        sizes.insert(sizes.end(), std::begin(BUILTIN_READER_POINT_SIZES), std::end(BUILTIN_READER_POINT_SIZES));
+        std::sort(sizes.begin(), sizes.end());
+        sizes.erase(std::unique(sizes.begin(), sizes.end()), sizes.end());
+        return sizes;
+      }
     }
   }
   return {std::begin(BUILTIN_READER_POINT_SIZES), std::end(BUILTIN_READER_POINT_SIZES)};

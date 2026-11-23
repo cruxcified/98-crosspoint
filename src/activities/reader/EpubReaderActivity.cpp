@@ -2576,7 +2576,7 @@ void EpubReaderActivity::applyTextSettingLive() {
 void EpubReaderActivity::showTextRowPopup(const int row) {
   switch (row) {
     case 1: {
-      // The point sizes the active family actually ships.
+      // The point sizes the active family offers (see readerFontPointSizes).
       const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
       if (sizes.empty()) return;
       std::vector<std::string> labels;

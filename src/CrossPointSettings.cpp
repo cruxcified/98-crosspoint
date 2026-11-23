@@ -406,7 +406,7 @@ int CrossPointSettings::getReaderFontId() const {
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
     int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontPointSize);
     if (id != 0) return id;
-    // Fall through to built-in if SD font not found
+    // 0: family missing, or it lacks this size; the built-in font renders it
   }
 
   // A built-in family only exists at BUILTIN_READER_POINT_SIZES, so a size

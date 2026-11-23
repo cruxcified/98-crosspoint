@@ -331,7 +331,7 @@ void TextSettingsActivity::applyFamily(int listIndex) {
 
   if (currentFamilyIndex_ != listIndex) return;  // switch failed — keep the old size list
 
-  // The new family ships its own set of point sizes, and ensureLoaded() may have
+  // The new family offers its own set of point sizes, and ensureLoaded() may have
   // snapped the selection into it, so the Size tab's list and its nav position
   // both have to be rebuilt.
   rebuildSizeList();

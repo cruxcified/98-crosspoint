@@ -1,10 +1,12 @@
 #include <HalStorage.h>
+#include <ReaderFontSizes.h>
 #include <SdCardFontRegistry.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
 #include <new>
 #include <string>
+#include <vector>
 
 namespace {
 size_t failNextArraySize = 0;
@@ -78,6 +80,17 @@ TEST_F(SdFontRegistryTest, OtherStemsAndZeroPaddedSizesKeepTheirFilename) {
   ASSERT_NE(file16, nullptr);
   EXPECT_STREQ(file16->name.get(), "Bookerly_016.cpfont");
   EXPECT_EQ(pathOf(*family, *file16), "/fonts/Bookerly/Bookerly_016.cpfont");
+}
+
+TEST_F(SdFontRegistryTest, PrerasterizedFamilyAlsoOffersBuiltinSizes) {
+  fake::add("/.fonts/Bitter/Bitter_12.cpfont");
+  fake::add("/.fonts/Bitter/Bitter_13.cpfont");
+  fake::add("/.fonts/Bitter/Bitter_14.cpfont");
+
+  ASSERT_TRUE(registry.discover());
+  EXPECT_EQ(readerFontPointSizes(&registry, "Bitter"), (std::vector<uint8_t>{10, 11, 12, 13, 14, 16, 18}));
+  EXPECT_EQ(readerFontPointSizes(&registry, ""), (std::vector<uint8_t>{10, 11, 12, 14, 16, 18}));
+  EXPECT_EQ(readerFontPointSizes(&registry, "Missing"), (std::vector<uint8_t>{10, 11, 12, 14, 16, 18}));
 }
 
 TEST_F(SdFontRegistryTest, HiddenRootWinsAndKeepsItsOwnRoot) {

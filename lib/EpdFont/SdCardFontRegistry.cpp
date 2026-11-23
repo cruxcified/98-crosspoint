@@ -28,8 +28,7 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t s
 const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t pointSize, const uint8_t style) const {
   // The reader stores an actual point size, so an exact match is the norm and
   // falls out of the delta search below (delta 0). The search only matters when
-  // the size was carried over from a family that ships different sizes; the
-  // caller then persists the snapped size (SdCardFontSystem::ensureLoaded).
+  // the size was carried over from a family that ships different sizes.
   const SdCardFontFileInfo* best = nullptr;
   uint8_t bestDelta = 255;
   for (const auto& f : files) {

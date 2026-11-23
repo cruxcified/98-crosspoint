@@ -14,7 +14,7 @@
 // Reader font size is stored as an actual point size (see CrossPointSettings::
 // fontPointSize), not an abstract Small/Medium/Large slot. The selectable sizes
 // therefore come from whichever family is active: the built-in or vector set
-// below, or the .cpfont files a user installed for an SD family.
+// below, plus the .cpfont files a user installed for an SD family.
 
 // The built-in Noto Sans family is compiled in at exactly these
 // point sizes (see the global font objects in main.cpp).
@@ -49,7 +49,8 @@ inline int builtinReaderFontVariant(const int fontId, const float scale) {
 inline constexpr uint8_t VECTOR_READER_POINT_SIZES[] = {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 
 // Point sizes selectable for the active reader font, ascending: the vector set
-// or installed .cpfont sizes for a known SD family, otherwise the built-in set.
+// for a vector SD family, installed .cpfont sizes plus the built-in set for a
+// .cpfont family, otherwise the built-in set.
 // Never returns empty.
 std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, const char* sdFamilyName);
 
