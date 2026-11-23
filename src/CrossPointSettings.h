@@ -387,6 +387,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t desktopShowNetwork = 1;
   uint8_t desktopShowPlugins = 1;  // also covers OPDS, which takes the Plugins slot
   char desktopWallpaper[96] = "";
+  // My Books cover grid: title under each cover (0 = hidden, covers grow into the space).
+  uint8_t libraryCoverTitles = 0;
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep

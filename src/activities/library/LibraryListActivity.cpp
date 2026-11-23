@@ -1130,9 +1130,11 @@ constexpr int16_t RING_ROOM = RING_GAP + RING_WIDTH;
 // The shelf plank under each row of covers, below the selection ring.
 constexpr int16_t PLANK_HEIGHT = 5;
 constexpr int16_t LABEL_GAP = RING_ROOM + PLANK_HEIGHT + 3;
+// Space between a plank and the next row's ring when covers have no titles.
+constexpr int16_t BARE_PLANK_ROOM = 6;
 }  // namespace
 
-// Covers stand on planks, three to a row, with the title under each. Paging is
+// Covers stand on planks, three to a row, with an optional title under each. Paging is
 // by whole pages: e-ink redraws the screen either way, so a page step shows
 // nine new books for the same refresh as one new row.
 void LibraryListActivity::buildGrid(UiScreen& screen) {
@@ -1151,7 +1153,10 @@ void LibraryListActivity::buildGrid(UiScreen& screen) {
   coverText = grid.titleText;
   coverText.align = fui::TextAlign::Center;
   coverText.maxLines = 5;
-  const int16_t lineHeight = screen.target().lineHeight(grid.titleText.font);
+  // Without titles the covers grow into the label line.
+  const bool showLabels = SETTINGS.libraryCoverTitles != 0;
+  const int16_t lineHeight = showLabels ? screen.target().lineHeight(grid.titleText.font) : 0;
+  const int16_t belowCover = showLabels ? LABEL_GAP : RING_ROOM + PLANK_HEIGHT + BARE_PLANK_ROOM;
   grid.rowHeight = static_cast<int16_t>(area.height / GRID_ROWS);
   const int scrollRoom = grid.scrollIndicatorWidth + grid.scrollIndicatorGap;
   const int cellWidth = (area.width - scrollRoom - (GRID_COLUMNS - 1) * GRID_GAP) / GRID_COLUMNS;
@@ -1159,7 +1164,7 @@ void LibraryListActivity::buildGrid(UiScreen& screen) {
   // height names the thumb files, so it is rounded to a coarse step: small
   // layout changes then reuse the thumbs already on the card.
   const int coverHeight =
-      std::min(grid.rowHeight - RING_ROOM - LABEL_GAP - lineHeight, (cellWidth - 2 * RING_ROOM) * 3 / 2) & ~7;
+      std::min(grid.rowHeight - RING_ROOM - belowCover - lineHeight, (cellWidth - 2 * RING_ROOM) * 3 / 2) & ~7;
   if (coverHeight < 24) return;
   covers.setCoverHeight(coverHeight);
   grid.coverSize = {static_cast<int16_t>(coverHeight * 2 / 3), static_cast<int16_t>(coverHeight)};
@@ -1297,6 +1302,12 @@ void LibraryListActivity::formatAuthorHeading(const std::string& author, std::st
   }
 }
 
+namespace {
+constexpr int16_t CORNER_STATUS_INSET = 10;
+constexpr int16_t TITLE_GAP = 10;
+constexpr uint8_t CAPTION_RADIUS = 10;
+}  // namespace
+
 void LibraryListActivity::buildHeader(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& theme = screen.theme();
@@ -1309,19 +1320,24 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   // Same battery/clock band as every GUI.drawHeader screen; the header
   // heights are unified across themes, so the buttons derive from the band.
   GUI.applyHeaderStatus(renderer, header);
-  // Win98 window: a black title bar with white text and boxed caption buttons.
+  // A white title bar with a dark rule under it: softer on e-ink than a solid
+  // black bar. Caption buttons are rounded.
   header.styles = fui::StyleSet{};
   header.styles.explicitlySet = true;
-  header.styles.normal.background = fui::Paint::solid(fui::Color::Black);
-  header.titleText.color = fui::Color::White;
+  header.styles.normal.background = fui::Paint::solid(fui::Color::White);
+  header.styles.normal.border = fui::Paint::solid(fui::Color::Black);
+  header.styles.normal.borderWidth = 2;
+  header.borderEdges = fui::EdgeBottom;
   header.titleText.bold = true;
-  header.status.battery.color = fui::Color::White;
-  header.status.battery.text.color = fui::Color::White;
+  // Clock and battery sit in the corners, in line with the caption buttons.
+  header.status.edgeInset = CORNER_STATUS_INSET;
+  // Room between the back button and the title.
+  header.leftReserve = TITLE_GAP;
   fui::StyleSet captionButton;
   captionButton.explicitlySet = true;
   captionButton.normal.background = fui::Paint::solid(fui::Color::White);
   captionButton.normal.border = fui::Paint::solid(fui::Color::Black);
-  captionButton.normal.borderWidth = 2;
+  captionButton.normal.borderWidth = 1;
   captionButton.normal.foreground = fui::Paint::solid(fui::Color::Black);
   captionButton.selected = captionButton.normal;
   captionButton.focused = captionButton.normal;
@@ -1330,6 +1346,8 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   captionButton.active.foreground = fui::Paint::solid(fui::Color::White);
   header.leadingStyles = captionButton;
   header.trailingStyles = captionButton;
+  header.leadingRadius = CAPTION_RADIUS;
+  header.trailingRadius = CAPTION_RADIUS;
   constexpr int16_t CAPTION_BUTTON = 40;
   header.actionOffsetY = static_cast<int16_t>(header.actionOffsetY + (header.leadingSize - CAPTION_BUTTON) / 2);
   header.leadingSize = CAPTION_BUTTON;

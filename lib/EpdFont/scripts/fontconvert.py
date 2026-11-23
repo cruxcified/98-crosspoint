@@ -1,5 +1,4 @@
 #!python3
-import ctypes
 import zlib
 import sys
 import re
@@ -26,7 +25,6 @@ parser.add_argument("--compress", dest="compress", action="store_true", help="Co
 parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
-parser.add_argument("--embolden-x", dest="embolden_x", type=int, default=0, help="Synthetic bold for a first face without a bold cut: widen its strokes and advances horizontally by this many pixels. Later faces in the stack are used as they are.")
 args = parser.parse_args()
 
 import freetype
@@ -271,13 +269,7 @@ def load_glyph(code_point):
         if glyph_index is None:
             glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
-            if args.embolden_x and face_index == 0:
-                face.load_glyph(glyph_index, load_flags & ~freetype.FT_LOAD_RENDER)
-                if face.glyph.format == freetype.FT_GLYPH_FORMAT_OUTLINE:
-                    freetype.raw.FT_Outline_EmboldenXY(ctypes.byref(face.glyph._FT_GlyphSlot.contents.outline), args.embolden_x * 64, 0)
-                face.glyph.render(freetype.FT_RENDER_MODE_NORMAL)
-            else:
-                face.load_glyph(glyph_index, load_flags)
+            face.load_glyph(glyph_index, load_flags)
             return face
         face_index += 1
     return None
@@ -382,7 +374,7 @@ for i_start, i_end in intervals:
             height = bitmap.rows,
             # We use linearHoriAdvance (16.16 fixed-point, unhinted) instead of
             # advance.x (26.6 fixed-point, grid-fitted to whole pixels by hinter)
-            advance_x = fp4_from_ft16_16(face.glyph.linearHoriAdvance + ((args.embolden_x << 16) if face is font_stack[0] else 0)),
+            advance_x = fp4_from_ft16_16(face.glyph.linearHoriAdvance),
             left = face.glyph.bitmap_left,
             top = face.glyph.bitmap_top,
             data_length = len(packed),

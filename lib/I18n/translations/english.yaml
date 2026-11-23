@@ -701,6 +701,7 @@ STR_W98_SHOW_BOOKS: "Show My Books"
 STR_W98_SHOW_NOTEPAD: "Show Notepad"
 STR_W98_SHOW_NETWORK: "Show Network"
 STR_W98_SHOW_PLUGINS: "Show Plugins"
+STR_LIBRARY_COVER_TITLES: "Titles Under Covers"
 
 STR_NOTEPAD_TITLE: "Notepad"
 STR_NOTEPAD_UNTITLED: "Untitled"

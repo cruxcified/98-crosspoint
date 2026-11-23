@@ -123,7 +123,7 @@ You can also move the selection with **Up** and **Down** and open it with **Conf
 
 **Desktop Icons** and **Wallpaper** in **Settings → Display** change the desktop. With Desktop Icons set to "Books Only", only the recent books show and the apps are in the Start menu. With "None", the desktop is empty and **Confirm** opens the Start menu. With "All", the **Show** toggles in the same menu hide single apps from the desktop. Hidden apps stay in the Start menu.
 
-Every menu and screen uses the VCR OSD Mono pixel font. Characters it does not have (for example Cyrillic, Greek, Hebrew or Arabic) are drawn in Ubuntu. Book text keeps the reader font you chose.
+The desktop and Start menu use the VCR OSD Mono pixel font. Characters it does not have (for example Cyrillic, Greek, Hebrew or Arabic) are drawn in Ubuntu. Settings and the other screens use the Ubuntu UI font, and book text keeps the reader font you chose.
 
 Tap **Start** on the taskbar to open the same list as a menu (without the book), followed by **Shut Down**, which puts the device to sleep the same way the Power button does. Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.
 
@@ -142,15 +142,15 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library is titled **My Books** and is drawn as a Windows 98 window: a black title bar, square tabs, a framed view and a status bar with the book position.
+The Library is titled **My Books** and is drawn as a Windows 98 window: a white title bar with the battery (and clock, when shown) in its corners and rounded buttons, square tabs, a framed view and a status bar with the book position.
 
-The Library indexes up to 4,096 supported books on the SD card, so you can find them without remembering their folders. Books are shown like a bookshelf: large covers, three to a row on shelf boards, with the title under each cover and nine books per page. A cover is made from the book the first time it is shown and saved in the book's cache folder, so the first visit to a page of new books fills in the covers over a few seconds and later visits are fast. Books without a cover show a plain book with the title on it. The selected book has a thick frame.
+The Library indexes up to 4,096 supported books on the SD card, so you can find them without remembering their folders. Books are shown like a bookshelf: large covers, three to a row on shelf boards, nine books per page. Titles are hidden under the covers by default; turn on **Titles Under Covers** in **Settings → Library** to show them (the covers are then a little smaller). A cover is made from the book the first time it is shown and saved in the book's cache folder, so the first visit to a page of new books fills in the covers over a few seconds and later visits are fast. Books without a cover show a plain book with the title on it. The selected book has a thick frame.
 
 Its five tabs provide different views. An arrow beside a tab shows the sort direction:
 
 - **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list.
 - **Title** sorts books by title. Up sorts A-Z and down sorts Z-A. The group list (see below) jumps by first letter; titles beginning with numbers or punctuation appear under `#`, and letters from non-English scripts, including Hebrew, have their own groups.
-- **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. The covers are labeled with the author here, and the group list jumps by author.
+- **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. When Titles Under Covers is on, the covers are labeled with the author here, and the group list jumps by author.
 - **New** lists books by when they arrived on the card (file date), without the recently opened books on top. Down shows the newest first.
 - **Shelf** turns each folder on the card into a shelf. It shows the list of shelves with their book counts; open one to see its books (A-Z), and press Back to return to the shelves. Books at the top of the card are under **No shelf**. Folders with the same name in different places are separate shelves. Up to 64 folders get their own shelf; books in further folders are under **No shelf**. A search on this tab is a plain title search.
 
@@ -227,7 +227,7 @@ Books cannot be removed from your device through Calibre. Use the web interface 
 
 ### 3.6 Settings
 
-Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, file-extension visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, and Move Finished Books to Read Folder. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
+Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, file-extension visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, Move Finished Books to Read Folder, and Titles Under Covers. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
 
 #### 3.6.1 Display
 
