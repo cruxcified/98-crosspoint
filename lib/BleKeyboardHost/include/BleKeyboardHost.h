@@ -52,9 +52,9 @@ enum class SpecialKey : uint8_t {
 // host emits on the press edge and synthesizes repeats while a key is held; key
 // releases are tracked internally for repeat but not surfaced.
 struct KeyEvent {
-  char ch = 0;                          // printable ASCII, or 0 for a special key
-  uint8_t keycode = 0;                  // raw HID usage id
-  uint8_t mods = 0;                     // HID modifier bitmask (ctrl/shift/alt/gui)
+  char ch = 0;          // printable ASCII, or 0 for a special key
+  uint8_t keycode = 0;  // raw HID usage id
+  uint8_t mods = 0;     // HID modifier bitmask (ctrl/shift/alt/gui)
   SpecialKey special = SpecialKey::None;
   bool pressed = true;
 };
@@ -84,8 +84,7 @@ struct RawButtonEvent {
   // read that no byte edge carries (an axis gamepad's zone) comes as one tap with
   // byteIndex 0xFF and reportId 0xFF.
   uint32_t code() const {
-    return static_cast<uint32_t>(value) | static_cast<uint32_t>(byteIndex) << 8 |
-           static_cast<uint32_t>(reportId) << 16;
+    return static_cast<uint32_t>(value) | static_cast<uint32_t>(byteIndex) << 8 | static_cast<uint32_t>(reportId) << 16;
   }
 };
 
@@ -236,7 +235,7 @@ class BleKeyboardHost {
   bool pushRawLocked(uint32_t code, bool pressed, uint32_t atMs, uint8_t keycode, uint8_t mods, uint8_t keep,
                      bool wasRest = false);
   void ingestRawEdge(const uint8_t* data, size_t len, uint32_t now, uint32_t lastMs);
-  void enqueue(const KeyEvent& ev);    // ring push (spinlock-guarded)
+  void enqueue(const KeyEvent& ev);             // ring push (spinlock-guarded)
   void emitUsage(uint8_t usage, uint8_t mods);  // translate + enqueue
   void persistBonds();
   void loadBonds();
