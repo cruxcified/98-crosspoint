@@ -116,6 +116,23 @@ void CoverPickerActivity::showMessage(const char* message) {
   requestUpdate();
 }
 
+void CoverPickerActivity::showFailure(const char* step, const int httpStatus) {
+  LOG_ERR("COV", "Failed at %s (HTTP %d)", step, httpStatus);
+  {
+    RenderLock lock(*this);
+    if (httpStatus > 0) {
+      snprintf(statusBuf, sizeof(statusBuf), "%s (%s: HTTP %d)", tr(STR_COVER_FAILED), step, httpStatus);
+    } else if (httpStatus == 0) {
+      snprintf(statusBuf, sizeof(statusBuf), "%s (%s: no answer)", tr(STR_COVER_FAILED), step);
+    } else {
+      snprintf(statusBuf, sizeof(statusBuf), "%s (%s)", tr(STR_COVER_FAILED), step);
+    }
+    state = State::Message;
+    status = statusBuf;
+  }
+  requestUpdate();
+}
+
 bool CoverPickerActivity::preventAutoSleep() {
   // The blocking work happens inside one loop() call, so the inactivity timer
   // last saw a key press before it: keep it reset briefly after the work ends.
@@ -133,8 +150,14 @@ void CoverPickerActivity::onWifiConnected() {
 
 bool CoverPickerActivity::search(const std::string& bookTitle, const std::string& bookAuthor) {
   // ~2.2 KB (mostly the JSON token buffer), freed when the search ends.
+  searchFailStep = nullptr;
+  searchFailStatus = 0;
   auto parser = makeUniqueNoThrow<OpenLibraryJsonParser>();
-  if (!parser) return false;
+  if (!parser) {
+    searchFailStep = "memory";
+    searchFailStatus = -1;
+    return false;
+  }
   auto fetch = [&parser](const std::string& url) {
     parser->beginResponse();
     const bool ok = HttpDownloader::fetchUrl(url, [&parser](const uint8_t* data, const size_t len) {
@@ -147,7 +170,18 @@ bool CoverPickerActivity::search(const std::string& bookTitle, const std::string
 
   std::string url = std::string(SEARCH_URL) + "&title=" + pluginhttp::urlEncodeQuery(bookTitle);
   if (!bookAuthor.empty()) url += "&author=" + pluginhttp::urlEncodeQuery(bookAuthor);
-  if (!fetch(url)) return false;
+  bool ok = fetch(url);
+  // Open Library is often slow or busy (no answer, 429, 5xx); one retry.
+  const int firstStatus = HttpDownloader::lastStatus();
+  if (!ok && !parser->hasError() && (firstStatus == 0 || firstStatus == 429 || firstStatus >= 500)) {
+    delay(2000);
+    ok = fetch(url);
+  }
+  if (!ok) {
+    searchFailStep = parser->hasError() ? "search reply" : "search";
+    searchFailStatus = HttpDownloader::lastStatus();
+    return false;
+  }
   const size_t searchCount = parser->coverCount();
   // Other editions of the top hit. Without them the search covers still count.
   if (parser->workKey()[0] != '\0') {
@@ -172,11 +206,11 @@ void CoverPickerActivity::findCandidates() {
   setStatus(tr(STR_COVER_SEARCHING));
   removePickerFiles();
   if (WiFi.status() != WL_CONNECTED) {
-    showMessage(tr(STR_COVER_FAILED));
+    showFailure("WiFi", -1);
     return;
   }
   if (!Storage.mkdir(PICKER_DIR)) {
-    showMessage(tr(STR_COVER_FAILED));
+    showFailure("SD card", -1);
     return;
   }
 
@@ -186,7 +220,7 @@ void CoverPickerActivity::findCandidates() {
     searched = search(title, "");
   }
   if (!searched) {
-    showMessage(tr(STR_COVER_FAILED));
+    showFailure(searchFailStep ? searchFailStep : "search", searchFailStatus);
     return;
   }
   if (candidateCount == 0) {
@@ -197,6 +231,8 @@ void CoverPickerActivity::findCandidates() {
   // Download each candidate and make its grid thumb; drop the ones that fail.
   const int found = candidateCount;
   int kept = 0;
+  bool anyDownloaded = false;
+  int downloadStatus = 0;
   const std::string download = std::string(PICKER_DIR) + "/download.jpg";
   for (int i = 0; i < found; i++) {
     {
@@ -205,10 +241,12 @@ void CoverPickerActivity::findCandidates() {
     }
     setStatus(statusBuf);
     if (HttpDownloader::downloadToFile(coverUrl(candidates[i], 'M'), download) != HttpDownloader::OK) {
+      downloadStatus = HttpDownloader::lastStatus();
       // No answer at all (WiFi lost, timeout): the rest would wait just as long.
-      if (HttpDownloader::lastStatus() == 0) break;
+      if (downloadStatus == 0) break;
       continue;
     }
+    anyDownloaded = true;
     const std::string medium = mediumPath(kept);
     if (!Storage.rename(download.c_str(), medium.c_str())) continue;
     if (!Txt::convertCoverImageToBmp(medium, thumbPath(kept), coverHeight)) {
@@ -218,13 +256,14 @@ void CoverPickerActivity::findCandidates() {
     candidates[kept++] = candidates[i];
   }
 
-  RenderLock lock(*this);
-  candidateCount = kept;
   if (kept == 0) {
-    state = State::Message;
-    status = tr(STR_COVER_FAILED);
+    candidateCount = 0;
+    // Downloaded but none decoded: the image, not the network.
+    showFailure(anyDownloaded ? "image" : "cover download", anyDownloaded ? -1 : downloadStatus);
     return;
   }
+  RenderLock lock(*this);
+  candidateCount = kept;
   state = State::Picking;
   status = nullptr;
 }
