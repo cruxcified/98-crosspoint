@@ -83,7 +83,9 @@ bool LibraryCoverCache::hasWork() const {
 
 bool LibraryCoverCache::thumbPaths(const std::string& book, std::string& thumb, std::string& marker) const {
   // Constructors only derive cache paths; parsing happens in generateThumb().
-  const std::string suffix = "/thumb_" + std::to_string(coverHeight) + ".none";
+  // ".nocover" replaced ".none" when large JPEG covers became decodable, so
+  // books marked before that are tried again.
+  const std::string suffix = "/thumb_" + std::to_string(coverHeight) + ".nocover";
   if (FsHelpers::hasReflowableBookExtension(book)) {
     auto epub = makeUniqueNoThrow<Epub>(book, "/.crosspoint");
     if (!epub) return false;

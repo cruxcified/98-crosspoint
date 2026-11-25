@@ -72,6 +72,12 @@ class Epub {
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
+  // A cover the reader picked for this book. It lives outside the book cache,
+  // so "Delete Book Cache" keeps it, and it wins over the book's own cover.
+  std::string getCustomCoverPath() const;
+  // Deletes the cover and thumb BMPs made so far (and the library's "no cover"
+  // markers), so they are made again from the current cover.
+  void clearCoverImages() const;
   std::string getCoverBmpPath(bool cropped = false, bool originalThresholds = false) const;
   bool generateCoverBmp(bool cropped = false, bool originalThresholds = false) const;
   std::string getThumbBmpPath() const;

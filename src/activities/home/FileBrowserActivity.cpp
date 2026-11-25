@@ -1,5 +1,6 @@
 #include "FileBrowserActivity.h"
 
+#include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -489,15 +490,26 @@ void FileBrowserActivity::renameSelectedFile(const std::string& oldPath, const s
   const bool hasBookmarks = FsHelpers::hasReflowableBookExtension(oldPath);
   const std::string oldBookmarkPath = hasBookmarks ? BookmarkUtil::getBookmarkPath(oldPath) : "";
   const std::string newBookmarkPath = hasBookmarks ? BookmarkUtil::getBookmarkPath(newPath) : "";
+  // The cover picked with Find Cover is keyed by the book path too.
+  const bool isReflowable = FsHelpers::hasReflowableBookExtension(oldPath);
+  const std::string oldCoverPath = isReflowable ? Epub(oldPath, "/.crosspoint").getCustomCoverPath() : "";
+  const std::string newCoverPath = isReflowable ? Epub(newPath, "/.crosspoint").getCustomCoverPath() : "";
   bool cacheMoved = false;
   bool bookmarksMoved = false;
+  bool coverMoved = false;
   if (!moveStatePath(oldCachePath, newCachePath, cacheMoved)) return;
   if (!moveStatePath(oldBookmarkPath, newBookmarkPath, bookmarksMoved)) {
     rollBackStatePath(oldCachePath, newCachePath, cacheMoved);
     return;
   }
+  if (!moveStatePath(oldCoverPath, newCoverPath, coverMoved)) {
+    rollBackStatePath(oldBookmarkPath, newBookmarkPath, bookmarksMoved);
+    rollBackStatePath(oldCachePath, newCachePath, cacheMoved);
+    return;
+  }
   if (!ClippingStore::moveBook(oldPath, newPath)) {
     LOG_ERR("FileBrowser", "Failed to rename file: %s -> %s", oldPath.c_str(), newPath.c_str());
+    rollBackStatePath(oldCoverPath, newCoverPath, coverMoved);
     rollBackStatePath(oldBookmarkPath, newBookmarkPath, bookmarksMoved);
     rollBackStatePath(oldCachePath, newCachePath, cacheMoved);
     return;
