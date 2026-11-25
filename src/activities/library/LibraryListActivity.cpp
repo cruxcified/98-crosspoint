@@ -1,6 +1,7 @@
 #include "LibraryListActivity.h"
 
 #include <BoardConfig.h>
+#include <Epub.h>
 #include <FreeInkUIIcon.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "CoverPickerActivity.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -302,37 +304,87 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     }
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  // Covers can be picked for books the Epub class reads (not XTC).
+  enum class Option : uint8_t { Open, FindCover, RestoreCover, RemoveRecent, Delete, Rebuild };
+  Option actions[6];
+  const char* labels[6];
+  int count = 0;
+  auto add = [&](const Option option, const char* label) {
+    actions[count] = option;
+    labels[count++] = label;
+  };
+  add(Option::Open, tr(STR_OPEN));
+  if (FsHelpers::hasReflowableBookExtension(path)) {
+    add(Option::FindCover, tr(STR_FIND_COVER));
+    if (Storage.exists(Epub(path, "/.crosspoint").getCustomCoverPath().c_str())) {
+      add(Option::RestoreCover, tr(STR_RESTORE_COVER));
+    }
+  }
+  if (isStoreRow) add(Option::RemoveRecent, tr(STR_REMOVE_FROM_RECENTS));
+  add(Option::Delete, tr(STR_DELETE));
+  add(Option::Rebuild, tr(STR_LIBRARY_REBUILD));
+
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
-                   [this, path, title, isStoreRow](const int choice) {
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), labels, count, 0,
+                   [this, path, title, actions, count](const int choice) {
                      swallowHeldReleases();
-                     switch (choice) {
-                       case 0:
+                     if (choice < 0 || choice >= count) return;
+                     switch (actions[choice]) {
+                       case Option::Open:
                          openBookByPath(path);
                          break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
+                       case Option::FindCover:
+                         openCoverPicker(path);
                          break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
+                       case Option::RestoreCover:
+                         restoreBookCover(path);
                          break;
-                       case 3:
-                         if (isStoreRow) promptRebuildIndex();
+                       case Option::RemoveRecent:
+                         promptRemoveRecentBook(path, title);
                          break;
-                       default:
+                       case Option::Delete:
+                         promptDeleteBookByPath(path, title);
+                         break;
+                       case Option::Rebuild:
+                         promptRebuildIndex();
                          break;
                      }
                    });
   requestUpdate();
+}
+
+void LibraryListActivity::openCoverPicker(const std::string& path) {
+  // The picker reads and writes the card. It restarts the device back into
+  // this screen once WiFi was turned on; the result handler covers the rest.
+  index.close();
+  auto picker = makeUniqueNoThrow<CoverPickerActivity>(renderer, mappedInput, path);
+  if (!picker) {
+    LOG_ERR("LIB", "OOM: cover picker");
+    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    return;
+  }
+  startActivityForResult(std::move(picker), [this](const ActivityResult&) {
+    swallowHeldReleases();
+    {
+      RenderLock lock(*this);
+      if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+      // A new cover may have been saved; make the slots load it again.
+      covers.release();
+    }
+    requestUpdate(true);
+  });
+}
+
+void LibraryListActivity::restoreBookCover(const std::string& path) {
+  {
+    RenderLock lock(*this);
+    const Epub epub(path, "/.crosspoint");
+    Storage.remove(epub.getCustomCoverPath().c_str());
+    epub.clearCoverImages();
+    // Slots remember "thumb ready"; forget them so the cover is made again.
+    covers.release();
+  }
+  requestUpdate(true);
 }
 
 // Manual index refresh, same card discipline as the onEnter rebuild: the walk

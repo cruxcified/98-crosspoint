@@ -35,5 +35,10 @@ void clearBookCache(const std::string& path) {
 bool removeBookFile(const std::string& path) {
   if (!Storage.remove(path.c_str())) return false;
   clearBookCache(path);
+  // A cover picked with Find Cover lives outside the cache.
+  if (FsHelpers::hasReflowableBookExtension(path)) {
+    const std::string customCover = Epub(path, "/.crosspoint").getCustomCoverPath();
+    if (Storage.exists(customCover.c_str())) Storage.remove(customCover.c_str());
+  }
   return ClippingStore::deleteForFilePath(path, "epub");
 }

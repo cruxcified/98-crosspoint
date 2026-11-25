@@ -201,6 +201,13 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     }
   }
 
+  // The cover picked with Find Cover is keyed by the book path too.
+  const std::string oldCover = Epub(srcPath, "/.crosspoint").getCustomCoverPath();
+  if (Storage.exists(oldCover.c_str())) {
+    const std::string newCover = Epub(dstPath, "/.crosspoint").getCustomCoverPath();
+    if (!Storage.rename(oldCover.c_str(), newCover.c_str())) LOG_ERR("ERS", "Failed to move picked cover (non-fatal)");
+  }
+
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, cacheMoved ? newCachePath : oldCachePath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;

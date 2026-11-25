@@ -148,7 +148,7 @@ The Library indexes up to 4,096 supported books on the SD card, so you can find 
 
 Its five tabs provide different views. An arrow beside a tab shows the sort direction:
 
-- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list.
+- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list. **Find Cover** connects to Wi-Fi, searches Open Library (openlibrary.org) with the book's title and author, and shows up to six covers to pick from. The chosen cover replaces the book's own cover in the library, on Home and on the sleep screen, and is kept when you delete the book cache. **Use Book's Own Cover** undoes it. Find Cover works for EPUB, TXT and Markdown books. Leaving Find Cover restarts the device into My Books to free the Wi-Fi memory.
 - **Title** sorts books by title. Up sorts A-Z and down sorts Z-A. The group list (see below) jumps by first letter; titles beginning with numbers or punctuation appear under `#`, and letters from non-English scripts, including Hebrew, have their own groups.
 - **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. When Titles Under Covers is on, the covers are labeled with the author here, and the group list jumps by author.
 - **New** lists books by when they arrived on the card (file date), without the recently opened books on top. Down shows the newest first.

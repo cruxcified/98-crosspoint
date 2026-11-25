@@ -167,6 +167,14 @@ constexpr int MAX_MCU_HEIGHT = 16;
 constexpr size_t JPEG_DECODER_SIZE = 20 * 1024;
 constexpr size_t MIN_FREE_HEAP = JPEG_DECODER_SIZE + 32 * 1024;
 constexpr uint32_t FP_ONE = 1UL << 16;
+// The decode grid (after JPEGDEC's 1/2..1/8 scaling) bounds the MCU row
+// buffer: 16 rows x 2048 bytes = 32 KB at most.
+constexpr int MAX_DECODE_WIDTH = 2048;
+constexpr int MAX_DECODE_HEIGHT = 3072;
+// Decode time grows with source pixels even at 1/8 (every coefficient is
+// still Huffman-decoded), so very large sources are refused.
+constexpr int MAX_SOURCE_DIMENSION = 12000;
+constexpr uint32_t MAX_SOURCE_PIXELS = 36u * 1000u * 1000u;
 
 // Static file pointer for JPEGDEC open callback.
 // Safe in single-threaded embedded context; never accessed concurrently.
@@ -540,42 +548,18 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   const int srcWidth = jpeg->getWidth();
   const int srcHeight = jpeg->getHeight();
   const bool progressiveDecode = (jpeg->getJPEGType() == JPEG_MODE_PROGRESSIVE);
-  // JPEGDEC forces progressive streams to JPEG_SCALE_EIGHTH in DecodeJPEG,
-  // so callback coordinates and MCU buffering must use the reduced decode grid.
-  const int decodedSrcWidth = progressiveDecode ? ((srcWidth + 7) >> 3) : srcWidth;
-  const int decodedSrcHeight = progressiveDecode ? ((srcHeight + 7) >> 3) : srcHeight;
 
   LOG_DBG("JPG", "JPEG dimensions: %dx%d", srcWidth, srcHeight);
-  if (progressiveDecode) {
-    LOG_DBG("JPG", "Progressive JPEG decode uses 1/8 source: %dx%d", decodedSrcWidth, decodedSrcHeight);
-  }
-
-  constexpr int MAX_IMAGE_WIDTH = 2048;
-  constexpr int MAX_IMAGE_HEIGHT = 3072;
-
-  if (srcWidth <= 0 || srcHeight <= 0 || srcWidth > MAX_IMAGE_WIDTH || srcHeight > MAX_IMAGE_HEIGHT) {
-    LOG_DBG("JPG", "Image too large or invalid (%dx%d), max supported: %dx%d", srcWidth, srcHeight, MAX_IMAGE_WIDTH,
-            MAX_IMAGE_HEIGHT);
+  if (srcWidth <= 0 || srcHeight <= 0 || srcWidth > MAX_SOURCE_DIMENSION || srcHeight > MAX_SOURCE_DIMENSION ||
+      static_cast<uint32_t>(srcWidth) * static_cast<uint32_t>(srcHeight) > MAX_SOURCE_PIXELS) {
+    LOG_DBG("JPG", "Image too large or invalid (%dx%d)", srcWidth, srcHeight);
     return false;
   }
 
-  // Calculate output dimensions (pre-scale to fit display exactly)
-  int outWidth = srcWidth;
-  int outHeight = srcHeight;
-  if (targetWidth <= 0 || targetHeight <= 0) {
-    // Without an explicit target, keep decoder-native dimensions.
-    outWidth = decodedSrcWidth;
-    outHeight = decodedSrcHeight;
-  }
-
-  const int scaleSrcWidth = decodedSrcWidth;
-  const int scaleSrcHeight = decodedSrcHeight;
-
-  uint32_t scaleX_fp = 65536;  // 1.0 in 16.16 fixed point
-  uint32_t scaleY_fp = 65536;
-  bool needsScaling = false;
-
-  if (targetWidth > 0 && targetHeight > 0 && (srcWidth != targetWidth || srcHeight != targetHeight)) {
+  // Output dimensions (pre-scale to fit the target exactly).
+  int outWidth = 0;
+  int outHeight = 0;
+  if (targetWidth > 0 && targetHeight > 0) {
     const float scaleToFitWidth = static_cast<float>(targetWidth) / srcWidth;
     const float scaleToFitHeight = static_cast<float>(targetHeight) / srcHeight;
     float scale = 1.0f;
@@ -589,10 +573,48 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
     outHeight = static_cast<int>(srcHeight * scale);
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
-
-    LOG_DBG("JPG", "Scaling source %dx%d (decode grid %dx%d) -> %dx%d (target %dx%d)", srcWidth, srcHeight,
-            scaleSrcWidth, scaleSrcHeight, outWidth, outHeight, targetWidth, targetHeight);
   }
+
+  // JPEGDEC forces progressive streams to JPEG_SCALE_EIGHTH in DecodeJPEG.
+  // Baseline images decode at 1/2, 1/4 or 1/8 size while that grid still
+  // covers the output (the area average then sees the same detail), and as
+  // far as needed to fit the MCU row buffer. Large covers decode, and thumbs
+  // skip most of the IDCT work.
+  int scaleShift = progressiveDecode ? 3 : 0;
+  auto decodedSize = [](const int size, const int shift) { return (size + (1 << shift) - 1) >> shift; };
+  while (scaleShift < 3) {
+    const bool overLimit =
+        decodedSize(srcWidth, scaleShift) > MAX_DECODE_WIDTH || decodedSize(srcHeight, scaleShift) > MAX_DECODE_HEIGHT;
+    const bool stillCoversOutput = outWidth > 0 && decodedSize(srcWidth, scaleShift + 1) >= outWidth &&
+                                   decodedSize(srcHeight, scaleShift + 1) >= outHeight;
+    if (!overLimit && !stillCoversOutput) break;
+    scaleShift++;
+  }
+  const int decodedSrcWidth = decodedSize(srcWidth, scaleShift);
+  const int decodedSrcHeight = decodedSize(srcHeight, scaleShift);
+  if (decodedSrcWidth > MAX_DECODE_WIDTH || decodedSrcHeight > MAX_DECODE_HEIGHT) {
+    LOG_DBG("JPG", "Image too large (%dx%d) even at 1/8 decode", srcWidth, srcHeight);
+    return false;
+  }
+  if (scaleShift > 0) {
+    LOG_DBG("JPG", "Decoding at 1/%d size: %dx%d", 1 << scaleShift, decodedSrcWidth, decodedSrcHeight);
+  }
+
+  if (outWidth == 0) {
+    // Without an explicit target, keep decoder-native dimensions.
+    outWidth = decodedSrcWidth;
+    outHeight = decodedSrcHeight;
+  } else {
+    LOG_DBG("JPG", "Scaling source %dx%d (decode grid %dx%d) -> %dx%d (target %dx%d)", srcWidth, srcHeight,
+            decodedSrcWidth, decodedSrcHeight, outWidth, outHeight, targetWidth, targetHeight);
+  }
+
+  const int scaleSrcWidth = decodedSrcWidth;
+  const int scaleSrcHeight = decodedSrcHeight;
+
+  uint32_t scaleX_fp = 65536;  // 1.0 in 16.16 fixed point
+  uint32_t scaleY_fp = 65536;
+  bool needsScaling = false;
 
   if (scaleSrcWidth != outWidth || scaleSrcHeight != outHeight) {
     scaleX_fp = (static_cast<uint32_t>(scaleSrcWidth) << 16) / outWidth;
@@ -698,7 +720,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);
   jpeg->setUserPointer(&ctx);
 
-  rc = jpeg->decode(0, 0, 0);
+  static constexpr int SCALE_OPTIONS[] = {0, JPEG_SCALE_HALF, JPEG_SCALE_QUARTER, JPEG_SCALE_EIGHTH};
+  rc = jpeg->decode(0, 0, progressiveDecode ? 0 : SCALE_OPTIONS[scaleShift]);
 
   if (rc == 1 && ctx.smoothUpscale && !ctx.error) {
     finishSmoothUpscale(&ctx);

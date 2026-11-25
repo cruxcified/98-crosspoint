@@ -771,6 +771,38 @@ const std::string& Epub::getLanguage() const {
   return bookMetadataCache->coreMetadata.language;
 }
 
+std::string Epub::getCustomCoverPath() const {
+  // "<cache dir>/epub_<hash>" -> "<cache dir>/covers/epub_<hash>.jpg"
+  const size_t slash = cachePath.rfind('/');
+  if (slash == std::string::npos) return "";
+  return cachePath.substr(0, slash) + "/covers/" + cachePath.substr(slash + 1) + ".jpg";
+}
+
+void Epub::clearCoverImages() const {
+  for (const bool cropped : {false, true}) {
+    for (const bool original : {false, true}) Storage.remove(getCoverBmpPath(cropped, original).c_str());
+  }
+  // Thumbs and the library's "no cover" markers, one per cover height. Walk
+  // the whole folder: listFiles() stops at 200 names, and section images
+  // share this folder.
+  HalFile dir = Storage.open(cachePath.c_str());
+  if (!dir || !dir.isDirectory()) return;
+  std::vector<std::string> thumbs;
+  char name[64];
+  for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+    entry.getName(name, sizeof(name));
+    if (strncmp(name, "thumb_", 6) == 0) thumbs.push_back(cachePath + "/" + name);
+  }
+  dir.close();
+  for (const auto& path : thumbs) Storage.remove(path.c_str());
+}
+
+namespace {
+bool hasCustomCover(const std::string& customCoverPath) {
+  return !customCoverPath.empty() && Storage.exists(customCoverPath.c_str());
+}
+}  // namespace
+
 std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
   const auto coverFileName =
       std::string("cover") + (originalThresholds ? "_original" : "_legacy_v2") + (cropped ? "_crop" : "");
@@ -853,6 +885,13 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   // Already generated, return true
   if (Storage.exists(getCoverBmpPath(cropped, originalThresholds).c_str())) {
     return true;
+  }
+
+  const std::string customCover = getCustomCoverPath();
+  if (hasCustomCover(customCover)) {
+    setupCacheDir();
+    return Txt::convertCoverImageToBmp(customCover, getCoverBmpPath(cropped, originalThresholds), 0, cropped,
+                                       originalThresholds);
   }
 
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
@@ -949,6 +988,12 @@ bool Epub::generateThumbBmp(int height) const {
     return true;
   }
 
+  const std::string customCover = getCustomCoverPath();
+  if (hasCustomCover(customCover)) {
+    setupCacheDir();
+    return Txt::convertCoverImageToBmp(customCover, getThumbBmpPath(height), height);
+  }
+
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     LOG_ERR("EBP", "Cannot generate thumb BMP, cache not loaded");
     return false;
@@ -959,6 +1004,11 @@ bool Epub::generateThumbBmp(int height) const {
 
 bool Epub::generateThumbBmpFromSource(int height) {
   if (Storage.exists(getThumbBmpPath(height).c_str())) return true;
+  const std::string customCover = getCustomCoverPath();
+  if (hasCustomCover(customCover)) {
+    setupCacheDir();
+    return Txt::convertCoverImageToBmp(customCover, getThumbBmpPath(height), height);
+  }
   if (Txt::isTxtOrMd(filepath)) {
     std::string companionCover = Txt::findCompanionCoverImage(filepath);
     if (companionCover.empty()) return false;
