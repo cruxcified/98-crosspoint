@@ -41,6 +41,9 @@ class CoverPickerActivity final : public UiListActivity {
   bool search(const std::string& title, const std::string& author);
   void saveChoice(int index);
   void showMessage(const char* message);
+  // STR_COVER_FAILED plus the step that failed and its HTTP status, so a
+  // failure on the device can be told apart without a serial log.
+  void showFailure(const char* step, int httpStatus);
   void setStatus(const char* message);
   // Cover height that fits ROWS x COLUMNS on this screen (thumbs are made at it).
   int computeCoverHeight() const;
@@ -53,9 +56,13 @@ class CoverPickerActivity final : public UiListActivity {
   State state = State::Wifi;
   // Points at the i18n table or statusBuf; read by the render task.
   const char* status = nullptr;
-  char statusBuf[64] = {};
+  char statusBuf[96] = {};
   uint32_t candidates[MAX_CANDIDATES] = {};
   int candidateCount = 0;
+  // Set by search() when it fails: the step and its HTTP status
+  // (0 = no answer, -1 = not an HTTP step).
+  const char* searchFailStep = nullptr;
+  int searchFailStatus = 0;
   int coverHeight = 0;
   unsigned long workEndedMs = 0;
 };
