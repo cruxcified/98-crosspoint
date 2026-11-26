@@ -233,6 +233,9 @@ void CoverPickerActivity::findCandidates() {
   int kept = 0;
   bool anyDownloaded = false;
   int downloadStatus = 0;
+  // Which part of a failed download broke, shown with the error (no serial log on the device).
+  char downloadStep[64] = "cover download";
+  int noAnswerInARow = 0;
   const std::string download = std::string(PICKER_DIR) + "/download.jpg";
   for (int i = 0; i < found; i++) {
     {
@@ -240,12 +243,22 @@ void CoverPickerActivity::findCandidates() {
       snprintf(statusBuf, sizeof(statusBuf), tr(STR_COVER_DOWNLOADING), i + 1, found);
     }
     setStatus(statusBuf);
-    if (HttpDownloader::downloadToFile(coverUrl(candidates[i], 'M'), download) != HttpDownloader::OK) {
+    const auto result = HttpDownloader::downloadToFile(coverUrl(candidates[i], 'M'), download);
+    if (result != HttpDownloader::OK) {
       downloadStatus = HttpDownloader::lastStatus();
-      // No answer at all (WiFi lost, timeout): the rest would wait just as long.
-      if (downloadStatus == 0) break;
+      // Open Library answers with a redirect to archive.org, which serves the image.
+      const char* where = result == HttpDownloader::FILE_ERROR     ? "SD write"
+                          : HttpDownloader::lastAnswerRedirected() ? "archive.org"
+                                                                   : "covers.openlibrary.org";
+      snprintf(downloadStep, sizeof(downloadStep), "cover download at %s, %u KB block", where,
+               static_cast<unsigned>(ESP.getMaxAllocHeap() / 1024));
+      LOG_ERR("COV", "Cover %u failed: %s (HTTP %d)", static_cast<unsigned>(candidates[i]), downloadStep,
+              downloadStatus);
+      // No answer twice (WiFi lost, server down): the rest would fail the same way.
+      if (downloadStatus == 0 && ++noAnswerInARow >= 2) break;
       continue;
     }
+    noAnswerInARow = 0;
     anyDownloaded = true;
     const std::string medium = mediumPath(kept);
     if (!Storage.rename(download.c_str(), medium.c_str())) continue;
@@ -259,7 +272,7 @@ void CoverPickerActivity::findCandidates() {
   if (kept == 0) {
     candidateCount = 0;
     // Downloaded but none decoded: the image, not the network.
-    showFailure(anyDownloaded ? "image" : "cover download", anyDownloaded ? -1 : downloadStatus);
+    showFailure(anyDownloaded ? "image" : downloadStep, anyDownloaded ? -1 : downloadStatus);
     return;
   }
   RenderLock lock(*this);
