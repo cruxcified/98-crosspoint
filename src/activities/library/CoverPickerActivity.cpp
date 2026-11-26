@@ -14,11 +14,13 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <optional>
 #include <utility>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "SilentRestart.h"
+#include "WifiCredentialStore.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -37,6 +39,16 @@ constexpr int GRID_GAP = 12;
 constexpr int RING_GAP = 3;
 constexpr int RING_WIDTH = 3;
 constexpr int RING_ROOM = RING_GAP + RING_WIDTH;
+// Same wait as WifiSelectionActivity's auto-connect gives a saved network.
+constexpr unsigned long JOIN_TIMEOUT_MS = 7000;
+
+// The connecting page's picture, in the desktop's monospace pixel font.
+constexpr const char* LINK_ART[] = {
+    R"(+-------+             +-------+)",
+    R"(| [===] |   ((( )))   | [ ? ] |)",
+    R"(| READER| ~~~~~~~~~~> | COVERS|)",
+    R"(+-------+             +-------+)",
+};
 
 // The grid shows "M" covers (~180 px wide); the chosen one is saved from "L"
 // (~500 px), falling back to "M".
@@ -47,8 +59,11 @@ std::string coverUrl(const uint32_t id, const char size) {
 std::string mediumPath(const int index) { return std::string(PICKER_DIR) + "/" + std::to_string(index) + ".jpg"; }
 }  // namespace
 
-CoverPickerActivity::CoverPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath)
-    : UiListActivity("CoverPicker", renderer, mappedInput), bookPath(std::move(bookPath)) {}
+CoverPickerActivity::CoverPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
+                                         const bool restartOnExit)
+    : UiListActivity("CoverPicker", renderer, mappedInput),
+      bookPath(std::move(bookPath)),
+      restartOnExit(restartOnExit) {}
 
 void CoverPickerActivity::onEnter() {
   UiListActivity::onEnter();
@@ -56,8 +71,49 @@ void CoverPickerActivity::onEnter() {
   if (title.empty()) title = FsHelpers::getFileNameWithoutExtension(bookPath);
   coverHeight = computeCoverHeight();
 
+  startWifi();
+}
+
+void CoverPickerActivity::startWifi() {
+  // CoverFinder keeps WiFi on between books.
+  if (WiFi.status() == WL_CONNECTED) {
+    // loop() starts the search: onEnter must not block.
+    RenderLock lock(*this);
+    state = State::Working;
+    status = tr(STR_COVER_SEARCHING);
+    searchPending = true;
+    return;
+  }
+  {
+    // SD card reads share the bus with the render task's fonts.
+    RenderLock lock(*this);
+    WIFI_STORE.loadFromFile();
+  }
+  const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+  std::optional<WifiCredential> cred;
+  if (!lastSsid.empty()) cred = WIFI_STORE.findCredential(lastSsid);
+  if (!cred) {
+    // No last network; the WiFi list tries every saved one.
+    openWifiList(WIFI_STORE.getCredentialCount() != 0);
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    state = State::Connecting;
+    joiningSsid = cred->ssid;
+    joinStartedMs = millis();
+  }
+  requestUpdate();
+  WifiSelectionActivity::beginStationJoin(cred->ssid, cred->password);
+}
+
+void CoverPickerActivity::openWifiList(const bool autoConnect) {
+  {
+    RenderLock lock(*this);
+    state = State::Wifi;
+  }
   WiFi.mode(WIFI_STA);
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, autoConnect),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
                              finish();
@@ -72,7 +128,7 @@ void CoverPickerActivity::onExit() {
   UiListActivity::onExit();
   // Same as the other WiFi screens: restart to drop the WiFi/TLS heap
   // fragmentation, landing back on the library.
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
+  if (restartOnExit && WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
     delay(30);
     silentRestartToLibrary();
@@ -327,6 +383,31 @@ void CoverPickerActivity::saveChoice(const int index) {
 }
 
 void CoverPickerActivity::loop() {
+  if (searchPending) {
+    searchPending = false;
+    onWifiConnected();
+    return;
+  }
+  if (state == State::Connecting) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      WiFi.disconnect();
+      finish();
+      return;
+    }
+    const wl_status_t wifi = WiFi.status();
+    if (wifi == WL_CONNECTED) {
+      WifiSelectionActivity::onStationJoined(renderer);
+      onWifiConnected();
+      return;
+    }
+    if (wifi == WL_CONNECT_FAILED || wifi == WL_NO_SSID_AVAIL || millis() - joinStartedMs > JOIN_TIMEOUT_MS) {
+      LOG_ERR("COV", "Could not join %s (status %d)", joiningSsid.c_str(), static_cast<int>(wifi));
+      WiFi.disconnect();
+      // The list scans and tries the other saved networks in reach.
+      openWifiList(true);
+    }
+    return;
+  }
   if (state == State::Picking) {
     UiListActivity::loop();
     return;
@@ -345,6 +426,10 @@ void CoverPickerActivity::render(RenderLock&& lock) {
     UiListActivity::render(std::move(lock));
     return;
   }
+  if (state == State::Connecting) {
+    renderConnecting();
+    return;
+  }
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
@@ -361,6 +446,35 @@ void CoverPickerActivity::render(RenderLock&& lock) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
+  renderer.displayBuffer();
+}
+
+void CoverPickerActivity::renderConnecting() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int artLine = renderer.getLineHeight(DESKTOP_FONT_ID);
+  const int textLine = renderer.getLineHeight(UI_10_FONT_ID);
+  constexpr int artLines = sizeof(LINK_ART) / sizeof(LINK_ART[0]);
+  int y = (renderer.getScreenHeight() - artLines * artLine - 3 * textLine) / 2;
+
+  renderer.clearScreen();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_COVER_FINDER));
+  // Every art line has the same length, so centering keeps the columns lined up.
+  for (const char* line : LINK_ART) {
+    renderer.drawCenteredText(DESKTOP_FONT_ID, y, line);
+    y += artLine;
+  }
+  y += textLine * 2;
+  if (joiningSsid.empty()) {
+    renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_CONNECTING));
+  } else {
+    char line[96];
+    snprintf(line, sizeof(line), tr(STR_COVER_CONNECTING), joiningSsid.c_str());
+    const std::string shown = renderer.truncatedText(UI_10_FONT_ID, line, pageWidth - 2 * metrics.contentSidePadding);
+    renderer.drawCenteredText(UI_10_FONT_ID, y, shown.c_str());
+  }
+  const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
 

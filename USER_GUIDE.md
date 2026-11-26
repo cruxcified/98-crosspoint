@@ -113,6 +113,7 @@ The Home screen is the main entry point to the firmware. It looks like a Windows
 
 * **My Computer** opens **[Browse Files](#33-browse-files-screen)**.
 * **My Books** opens the **[Library](#34-library-screen)**.
+* **CoverFinder** shows every EPUB, TXT and Markdown book as a cover, A to Z. Nothing is downloaded until you tap a book; then it connects to Wi-Fi and works like **Find Cover** (see **[Library](#34-library-screen)**). Wi-Fi stays on while you pick covers for more books, and closing CoverFinder restarts the device to the desktop to free the Wi-Fi memory.
 * **Notepad** opens the Notepad app (notes are saved in `/notes`).
 * **Network** opens **[File Transfer](#35-file-transfer-screen)**.
 * **Settings** (the gear icon) opens **[Settings](#36-settings)**.
@@ -148,7 +149,7 @@ The Library indexes up to 4,096 supported books on the SD card, so you can find 
 
 Its five tabs provide different views. An arrow beside a tab shows the sort direction:
 
-- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list. **Find Cover** connects to Wi-Fi, searches Open Library (openlibrary.org) with the book's title and author, and shows up to six covers to pick from. The chosen cover replaces the book's own cover in the library, on Home and on the sleep screen, and is kept when you delete the book cache. **Use Book's Own Cover** undoes it. Find Cover works for EPUB, TXT and Markdown books. Leaving Find Cover restarts the device into My Books to free the Wi-Fi memory.
+- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list. **Find Cover** connects to your last saved Wi-Fi network on a CoverFinder connecting page (if that fails, the Wi-Fi list opens), searches Open Library (openlibrary.org) with the book's title and author, and shows up to six covers to pick from. The chosen cover replaces the book's own cover in the library, on Home and on the sleep screen, and is kept when you delete the book cache. **Use Book's Own Cover** undoes it. Find Cover works for EPUB, TXT and Markdown books. Leaving Find Cover restarts the device into My Books to free the Wi-Fi memory.
 - **Title** sorts books by title. Up sorts A-Z and down sorts Z-A. The group list (see below) jumps by first letter; titles beginning with numbers or punctuation appear under `#`, and letters from non-English scripts, including Hebrew, have their own groups.
 - **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. When Titles Under Covers is on, the covers are labeled with the author here, and the group list jumps by author.
 - **New** lists books by when they arrived on the card (file date), without the recently opened books on top. Down shows the newest first.
@@ -283,7 +284,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **Desktop Icons**: Which icons the Windows 98 desktop shows: "All" (apps and up to three recent books), "Books Only", or "None".
 
-- **Show My Computer**, **Show My Books**, **Show Notepad**, **Show Network**, **Show Plugins**: Hide single app icons from the desktop. They apply only when Desktop Icons is "All". Settings and recent books always show, and the Start menu still lists every app. **Show Plugins** also hides the OPDS Browser icon when it takes the Plugins place.
+- **Show My Computer**, **Show My Books**, **Show Notepad**, **Show Network**, **Show Plugins**: Hide single app icons from the desktop. They apply only when Desktop Icons is "All". Settings, CoverFinder and recent books always show, and the Start menu still lists every app. **Show Plugins** also hides the OPDS Browser icon when it takes the Plugins place.
 
 - **Wallpaper**: "None" (the grey desktop) or a BMP from the `/sleep` folder. The picture is scaled to cover the desktop and dithered to black and white. Only `/sleep` is listed, not `/.sleep`. This option needs PSRAM, so it appears on the X4 Pro but not on the X3 or X4.
 

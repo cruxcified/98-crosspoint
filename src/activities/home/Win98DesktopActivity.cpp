@@ -22,6 +22,7 @@
 #include "components/icons/blocks.h"
 #include "components/icons/book.h"
 #include "components/icons/computer.h"
+#include "components/icons/coverfinder.h"
 #include "components/icons/gear.h"
 #include "components/icons/library.h"
 #include "components/icons/notepad.h"
@@ -137,11 +138,12 @@ bool Win98DesktopActivity::shownOnDesktop(const Action action) {
 void Win98DesktopActivity::onEnter() {
   Activity::onEnter();
 
-  // Start menu: every app, then Shut Down. At most 7 entries.
+  // Start menu: every app, then Shut Down. At most 8 entries.
   menuItems.clear();
-  menuItems.reserve(7);
+  menuItems.reserve(8);
   menuItems.push_back({Action::Files, ComputerIcon, tr(STR_W98_MY_COMPUTER)});
   menuItems.push_back({Action::Library, LibraryIcon, tr(STR_W98_MY_BOOKS)});
+  menuItems.push_back({Action::CoverFinder, CoverFinderIcon, tr(STR_COVER_FINDER)});
   menuItems.push_back({Action::Notepad, NotepadIcon, tr(STR_NOTEPAD_TITLE)});
   menuItems.push_back({Action::Transfer, TransferIcon, tr(STR_W98_NETWORK)});
   menuItems.push_back({Action::Settings, GearIcon, tr(STR_SETTINGS_TITLE)});
@@ -185,6 +187,9 @@ void Win98DesktopActivity::onEnter() {
       break;
     case HomeMenuItem::NOTEPAD:
       initial = Action::Notepad;
+      break;
+    case HomeMenuItem::COVER_FINDER:
+      initial = Action::CoverFinder;
       break;
     case HomeMenuItem::FILE_TRANSFER:
       initial = Action::Transfer;
@@ -349,6 +354,9 @@ void Win98DesktopActivity::activate(const Action action, const int book) {
       break;
     case Action::Notepad:
       activityManager.goToNotepad();
+      break;
+    case Action::CoverFinder:
+      activityManager.goToCoverFinder();
       break;
     case Action::Transfer:
       activityManager.goToFileTransfer();

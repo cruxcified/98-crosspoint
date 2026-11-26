@@ -22,6 +22,7 @@
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/Win98DesktopActivity.h"
+#include "library/CoverFinderActivity.h"
 #include "library/LibraryListActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "network/UsbDriveActivity.h"
@@ -338,6 +339,10 @@ void ActivityManager::goToBrowser() {
 
 void ActivityManager::goToNotepad() { replaceActivity(std::make_unique<NotepadActivity>(renderer, mappedInput)); }
 
+void ActivityManager::goToCoverFinder() {
+  replaceActivity(std::make_unique<CoverFinderActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToPlugins() {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, /*rootMode=*/true));
 }
@@ -393,6 +398,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     } else if (activityName == "Notepad") {
       initialMenuItem = HomeMenuItem::NOTEPAD;
+    } else if (activityName == "CoverFinder") {
+      initialMenuItem = HomeMenuItem::COVER_FINDER;
     }
   }
   replaceActivity(std::make_unique<Win98DesktopActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
