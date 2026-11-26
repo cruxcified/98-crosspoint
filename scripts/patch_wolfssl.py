@@ -18,6 +18,13 @@ OVERRIDES = f"""
    heap, and TLS cert verification allocates dozens at once. */
 #undef FP_MAX_BITS
 #define FP_MAX_BITS 8192
+/* archive.org (Open Library cover images) still sends the 2004 Go Daddy Class 2
+   root, whose serial number is 0. Strict ASN parsing rejects that certificate
+   with ASN_PARSE_E and fails the whole handshake, even with verification off.
+   Relax the RFC 5280 conformance checks so such chains parse. */
+#ifndef WOLFSSL_NO_ASN_STRICT
+#define WOLFSSL_NO_ASN_STRICT
+#endif
 /* Arduino-wolfSSL always defines DEBUG_WOLFSSL, but SecureClient turns the
    trace on only in FREEINK_WOLFSSL_DEBUG builds. Drop it otherwise so the trace
    code and strings are not linked. Set the flag for all sources (build_flags),
