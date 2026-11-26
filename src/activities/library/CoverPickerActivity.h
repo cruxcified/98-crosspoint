@@ -56,7 +56,7 @@ class CoverPickerActivity final : public UiListActivity {
   State state = State::Wifi;
   // Points at the i18n table or statusBuf; read by the render task.
   const char* status = nullptr;
-  char statusBuf[96] = {};
+  char statusBuf[128] = {};
   uint32_t candidates[MAX_CANDIDATES] = {};
   int candidateCount = 0;
   // Set by search() when it fails: the step and its HTTP status
