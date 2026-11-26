@@ -398,7 +398,7 @@ void CoverPickerActivity::buildScreen(UiScreen& screen) {
 
   // One page: ListNav keeps the linear selection that buttons step through.
   fui::ListProps navProps;
-  nav.syncToProps(fui::Rect{0, 0, 1, static_cast<int16_t>(MAX_CANDIDATES)}, 1, 0, count, navProps, 1);
+  nav.syncToProps(fui::Rect{0, 0, 1, static_cast<int16_t>(MAX_CANDIDATES)}, 1, 0, count, navProps);
   nav.top = 0;
   nav.drawnCount = count;
   nav.onListRendered(0, MAX_CANDIDATES, true);
