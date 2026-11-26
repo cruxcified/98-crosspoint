@@ -123,6 +123,8 @@ You can also move the selection with **Up** and **Down** and open it with **Conf
 
 **Desktop Icons** and **Wallpaper** in **Settings → Display** change the desktop. With Desktop Icons set to "Books Only", only the recent books show and the apps are in the Start menu. With "None", the desktop is empty and **Confirm** opens the Start menu. With "All", the **Show** toggles in the same menu hide single apps from the desktop. Hidden apps stay in the Start menu.
 
+To pick a wallpaper by its picture, hold your finger on an empty part of the desktop. The Wallpaper screen shows "None" and the BMPs in `/sleep` as small black-and-white previews, the way the desktop will draw them. A file that cannot be read shows as a dark grey box. Tap one to set it and go back to the desktop; swipe up or down for more, or go **Back** to keep the current one. Like the Wallpaper setting, this works on the X4 Pro but not on the X3 or X4.
+
 The desktop and Start menu use the VCR OSD Mono pixel font. Characters it does not have (for example Cyrillic, Greek, Hebrew or Arabic) are drawn in Ubuntu. Settings and the other screens use the Ubuntu UI font, and book text keeps the reader font you chose.
 
 Tap **Start** on the taskbar to open the same list as a menu (without the book), followed by **Shut Down**, which puts the device to sleep the same way the Power button does. Tap an item to open it; tap anywhere else, or press **Back**, to close the menu. The taskbar also shows the battery level and, when the clock is set, the time.

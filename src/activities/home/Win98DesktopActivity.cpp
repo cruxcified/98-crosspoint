@@ -17,6 +17,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "WallpaperPickerActivity.h"
 #include "components/Win98Chrome.h"
 #include "components/Win98Wallpaper.h"
 #include "components/icons/blocks.h"
@@ -176,6 +177,7 @@ void Win98DesktopActivity::onEnter() {
   wallpaperKey = win98::wallpaperKey(renderer, SETTINGS.desktopWallpaper);
   hasWallpaper = !wallpaperKey.empty();
   if (!hasWallpaper) win98::releaseWallpaper();
+  canPickWallpaper = win98::wallpaperSupported();
 
   // Return to the icon the user opened.
   Action initial = Action::Files;
@@ -250,6 +252,17 @@ void Win98DesktopActivity::loop() {
 
   int tx = 0;
   int ty = 0;
+  // Holding the empty desktop opens the wallpaper chooser, like Win98's
+  // desktop right-click. A hold on an icon or the taskbar stays a tap.
+  if (canPickWallpaper && !menuOpen && mappedInput.wasScreenLongPress(tx, ty)) {
+    if (onDesktopBackground(tx, ty)) {
+      haptic_feedback::touchAction();
+      activityManager.replaceActivity(std::make_unique<WallpaperPickerActivity>(renderer, mappedInput));
+    } else {
+      handleTap(tx, ty);
+    }
+    return;
+  }
   if (mappedInput.wasScreenTapped(tx, ty)) {
     handleTap(tx, ty);
     return;
@@ -301,6 +314,14 @@ void Win98DesktopActivity::loop() {
     // Back is otherwise unused at home: resume the last book, as HomeActivity does.
     activate(Action::Resume);
   }
+}
+
+bool Win98DesktopActivity::onDesktopBackground(const int x, const int y) const {
+  if (y >= taskbarTop()) return false;
+  for (int i = 0; i < visibleIconCount(); ++i) {
+    if (iconCell(i).contains(x, y)) return false;
+  }
+  return true;
 }
 
 void Win98DesktopActivity::handleTap(const int x, const int y) {

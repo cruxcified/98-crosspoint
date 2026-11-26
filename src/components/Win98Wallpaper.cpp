@@ -45,17 +45,17 @@ void keepFrame(const GfxRenderer& r, const std::string& key) {
   cache.key = key;
 }
 
-// Scales the bitmap to cover the screen (nearest pixel, centred crop) and
-// Floyd-Steinberg dithers it to black and white.
-bool ditherToScreen(const GfxRenderer& r, const Bitmap& bmp) {
-  const int sw = r.getScreenWidth();
-  const int sh = r.getScreenHeight();
+// Scales the bitmap to cover a w x h box (nearest pixel, centred crop) and
+// Floyd-Steinberg dithers it to black and white, calling plot(x, y) for each
+// black pixel. Reads only the source rows the box samples.
+template <typename Plot>
+bool ditherCover(const Bitmap& bmp, const int w, const int h, Plot&& plot) {
   const int bw = bmp.getWidth();
   const int bh = bmp.getHeight();
-  if (bw <= 0 || bh <= 0 || bw > MAX_SOURCE_WIDTH || bh > MAX_SOURCE_HEIGHT) return false;
+  if (w <= 0 || h <= 0 || bw <= 0 || bh <= 0 || bw > MAX_SOURCE_WIDTH || bh > MAX_SOURCE_HEIGHT) return false;
 
   auto rows = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(bw + bmp.getRowBytes()));
-  auto errors = makeUniqueNoThrow<int16_t[]>(static_cast<size_t>(2 * (sw + 2)));
+  auto errors = makeUniqueNoThrow<int16_t[]>(static_cast<size_t>(2 * (w + 2)));
   if (!rows || !errors) {
     LOG_ERR("W98", "OOM: wallpaper row buffers");
     return false;
@@ -63,39 +63,47 @@ bool ditherToScreen(const GfxRenderer& r, const Bitmap& bmp) {
   uint8_t* gray = rows.get();
   uint8_t* raw = rows.get() + bw;
   int16_t* cur = errors.get();
-  int16_t* next = errors.get() + sw + 2;
+  int16_t* next = errors.get() + w + 2;
+  std::fill(cur, cur + w + 2, 0);
 
-  // Source pixels per screen pixel, 16.16 fixed point; cover = the smaller step.
-  const uint32_t step = std::min((static_cast<uint32_t>(bw) << 16) / sw, (static_cast<uint32_t>(bh) << 16) / sh);
-  const uint32_t offX = ((static_cast<uint32_t>(bw) << 16) - step * sw) / 2;
-  const uint32_t offY = ((static_cast<uint32_t>(bh) << 16) - step * sh) / 2;
+  // Source pixels per box pixel, 16.16 fixed point; cover = the smaller step.
+  const uint32_t step = std::min((static_cast<uint32_t>(bw) << 16) / w, (static_cast<uint32_t>(bh) << 16) / h);
+  const uint32_t offX = ((static_cast<uint32_t>(bw) << 16) - step * w) / 2;
+  const uint32_t offY = ((static_cast<uint32_t>(bh) << 16) - step * h) / 2;
 
-  r.clearScreen();
   int loadedRow = -1;
-  for (int sy = 0; sy < sh; ++sy) {
-    const int srcY = std::min(bh - 1, static_cast<int>((offY + step * sy) >> 16));
+  for (int y = 0; y < h; ++y) {
+    const int srcY = std::min(bh - 1, static_cast<int>((offY + step * y) >> 16));
     if (srcY != loadedRow) {
       if (bmp.readRowGray(srcY, gray, raw) != BmpReaderError::Ok) return false;
       loadedRow = srcY;
     }
-    std::fill(next, next + sw + 2, 0);
-    for (int sx = 0; sx < sw; ++sx) {
-      const int srcX = std::min(bw - 1, static_cast<int>((offX + step * sx) >> 16));
-      const int value = gray[srcX] + cur[sx + 1];
+    std::fill(next, next + w + 2, 0);
+    for (int x = 0; x < w; ++x) {
+      const int srcX = std::min(bw - 1, static_cast<int>((offX + step * x) >> 16));
+      const int value = gray[srcX] + cur[x + 1];
       const bool black = value < 128;
       const int error = value - (black ? 0 : 255);
-      if (black) r.drawPixel(sx, sy, true);
-      cur[sx + 2] = static_cast<int16_t>(cur[sx + 2] + error * 7 / 16);
-      next[sx] = static_cast<int16_t>(next[sx] + error * 3 / 16);
-      next[sx + 1] = static_cast<int16_t>(next[sx + 1] + error * 5 / 16);
-      next[sx + 2] = static_cast<int16_t>(next[sx + 2] + error / 16);
+      if (black) plot(x, y);
+      cur[x + 2] = static_cast<int16_t>(cur[x + 2] + error * 7 / 16);
+      next[x] = static_cast<int16_t>(next[x] + error * 3 / 16);
+      next[x + 1] = static_cast<int16_t>(next[x + 1] + error * 5 / 16);
+      next[x + 2] = static_cast<int16_t>(next[x + 2] + error / 16);
     }
     std::swap(cur, next);
   }
   return true;
 }
 
+bool ditherToScreen(const GfxRenderer& r, const Bitmap& bmp) {
+  r.clearScreen();
+  return ditherCover(bmp, r.getScreenWidth(), r.getScreenHeight(),
+                     [&r](const int x, const int y) { r.drawPixel(x, y, true); });
+}
+
 }  // namespace
+
+std::string wallpaperPath(const std::string& name) { return std::string(WALLPAPER_DIR) + "/" + name; }
 
 bool wallpaperSupported() { return HalMemory::getPsramHeap().largestBlockBytes > 0; }
 
@@ -136,6 +144,18 @@ void releaseWallpaper() {
   cache.frame.reset();
   cache.size = 0;
   cache.key.clear();
+}
+
+bool ditherWallpaperThumb(const char* path, const int w, const int h, uint8_t* bits) {
+  const size_t stride = (static_cast<size_t>(w) + 7) / 8;
+  memset(bits, 0, stride * h);
+  HalFile file;
+  if (!Storage.openFileForRead("W98", path, file)) return false;
+  Bitmap bmp(file);
+  if (bmp.parseHeaders() != BmpReaderError::Ok) return false;
+  return ditherCover(bmp, w, h, [bits, stride](const int x, const int y) {
+    bits[y * stride + (x >> 3)] |= static_cast<uint8_t>(0x80 >> (x & 7));
+  });
 }
 
 std::vector<std::string> listWallpapers(const size_t limit, const size_t maxPathLen) {
