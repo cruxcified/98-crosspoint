@@ -25,7 +25,18 @@ class Win98DesktopActivity final : public Activity {
   bool isHomeActivity() const override { return true; }
 
  private:
-  enum class Action : uint8_t { Resume, Files, Library, Notepad, Transfer, Settings, Plugins, Opds, ShutDown };
+  enum class Action : uint8_t {
+    Resume,
+    Files,
+    Library,
+    CoverFinder,
+    Notepad,
+    Transfer,
+    Settings,
+    Plugins,
+    Opds,
+    ShutDown
+  };
 
   struct Item {
     Action action;

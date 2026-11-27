@@ -10,12 +10,18 @@
 // cover (Epub::getCustomCoverPath). Every cover and thumb of the book is then
 // made again from it.
 //
+// WiFi: joins the last saved network behind its own CoverFinder-style page,
+// falling back to the WiFi list when there is none or it fails. With
+// restartOnExit (Find Cover from My Books) it restarts the device when done;
+// CoverFinder passes false and restarts once when it closes.
+//
 // Memory: the candidate thumbs live on the SD card (/.crosspoint/cover_picker)
 // and are painted from there; RAM holds six ids and one JSON parser (~2.2 KB)
 // while a response streams in.
 class CoverPickerActivity final : public UiListActivity {
  public:
-  CoverPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath);
+  CoverPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
+                      bool restartOnExit = true);
 
   void onEnter() override;
   void onExit() override;
@@ -28,13 +34,17 @@ class CoverPickerActivity final : public UiListActivity {
   static constexpr int ROWS = 2;
   static constexpr int MAX_CANDIDATES = COLUMNS * ROWS;
 
-  enum class State : uint8_t { Wifi, Working, Picking, Message };
+  enum class State : uint8_t { Wifi, Connecting, Working, Picking, Message };
 
   int listCount() const override { return state == State::Picking ? candidateCount : 0; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override;
 
+  // Joins the last saved network, or opens the WiFi list.
+  void startWifi();
+  void openWifiList(bool autoConnect);
+  void renderConnecting();
   void onWifiConnected();
   // Search, then download and convert the candidates; ends in Picking or Message.
   void findCandidates();
@@ -51,6 +61,12 @@ class CoverPickerActivity final : public UiListActivity {
   void removePickerFiles() const;
 
   std::string bookPath;
+  const bool restartOnExit;
+  // Network being joined on the Connecting page.
+  std::string joiningSsid;
+  unsigned long joinStartedMs = 0;
+  // WiFi was already up: loop() starts the search.
+  bool searchPending = false;
   std::string title;
   std::string author;
   State state = State::Wifi;

@@ -142,6 +142,13 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
 
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true);
+
+  // Starts joining `ssid` in station mode (empty password: open network) and
+  // returns at once; poll WiFi.status() for the result.
+  static void beginStationJoin(const std::string& ssid, const std::string& password);
+  // The work every station join does once connected: first clock sync,
+  // trusted-time sync and plugin outbox delivery.
+  static void onStationJoined(GfxRenderer& renderer);
   void onEnter() override;
   void onExit() override;
   void loop() override;

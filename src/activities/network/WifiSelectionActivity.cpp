@@ -465,6 +465,10 @@ void WifiSelectionActivity::attemptConnection() {
   connectionError.clear();
   requestUpdate();
 
+  beginStationJoin(selectedSSID, selectedRequiresPassword ? enteredPassword : std::string());
+}
+
+void WifiSelectionActivity::beginStationJoin(const std::string& ssid, const std::string& password) {
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
@@ -487,11 +491,32 @@ void WifiSelectionActivity::attemptConnection() {
     LOG_ERR("WIFI", "Failed to read station MAC for hostname (err=%d)", static_cast<int>(macResult));
   }
 
-  if (selectedRequiresPassword && !enteredPassword.empty()) {
-    WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
+  if (!password.empty()) {
+    WiFi.begin(ssid.c_str(), password.c_str());
   } else {
-    WiFi.begin(selectedSSID.c_str());
+    WiFi.begin(ssid.c_str());
   }
+}
+
+void WifiSelectionActivity::onStationJoined(GfxRenderer& renderer) {
+  // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
+  // drifts ~2 ppm so one sync is enough; users can force a re-sync from
+  // Settings > System > Clock > Sync clock now.
+  if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    if (halClock.syncFromNTP()) {
+      SETTINGS.clockHasBeenSynced = 1;
+      SETTINGS.saveToFile();
+    }
+  }
+
+  // Every station join is a chance to snap the loan-clock floor to real
+  // time (non-blocking; see TrustedTime).
+  trustedtime::startSync();
+
+  // Every station join is a window where plugin senders are deliverable, so
+  // drain the plugin outboxes here (web server up and sleep entry are the
+  // other such moments). Cheap no-op when nothing is queued.
+  pluginevents::drain(&renderer);
 }
 
 void WifiSelectionActivity::checkConnectionStatus() {
@@ -519,20 +544,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
             WiFi.RSSI());
 #endif
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > System > Clock > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
-      if (halClock.syncFromNTP()) {
-        SETTINGS.clockHasBeenSynced = 1;
-        SETTINGS.saveToFile();
-      }
-    }
-
-    // Every station join is a chance to snap the loan-clock floor to real
-    // time (non-blocking; see TrustedTime).
-    trustedtime::startSync();
-
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both
     {
@@ -540,10 +551,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
       WIFI_STORE.setLastConnectedSsid(selectedSSID);
     }
 
-    // Every station join is a window where plugin senders are deliverable, so
-    // drain the plugin outboxes here (web server up and sleep entry are the
-    // other such moments). Cheap no-op when nothing is queued.
-    pluginevents::drain(&renderer);
+    onStationJoined(renderer);
 
     // If we entered a new password, ask if user wants to save it
     // Otherwise, immediately complete so parent can start web server
