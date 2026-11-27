@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -40,6 +41,7 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
+#include "util/TaskWatchdog.h"
 
 namespace fui = freeink::ui;
 
@@ -50,16 +52,12 @@ SettingsSection sectionFor(const SettingInfo& setting);
 
 bool showOnDevice(const SettingInfo& setting) {
   if (sectionFor(setting) == SettingsSection::End || home_button::isSetting(setting.valuePtr)) return false;
-  // The sunlight fading fix is a grayscale-waveform compensation that does
-  // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
-  if (setting.valuePtr == &CrossPointSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
-    return false;
-  }
+  if (setting.valuePtr == &CrossPointSettings::fadingFix && !CrossPointSettings::fadingFixSupported()) return false;
   // Merged into the Text Settings screen.
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
   if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      !(BoardConfig::isX4Pro() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
+      !(CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
     return false;
   }
   return true;
@@ -69,6 +67,7 @@ bool showOnDevice(const SettingInfo& setting) {
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::libraryUseMetadata ||
+      setting.valuePtr == &CrossPointSettings::libraryRecentOpenedOnly ||
       setting.valuePtr == &CrossPointSettings::removeReadBooksFromRecents ||
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder ||
       setting.valuePtr == &CrossPointSettings::libraryCoverTitles) {
@@ -120,10 +119,10 @@ void SettingsActivity::rebuildSettings() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
-  // Rescan /dictionaries on every rebuild: cheap (one directory listing) and
-  // picks up dictionaries copied to the SD card since the last visit.
+  // Rescan /dictionaries on every rebuild to pick up dictionaries copied to the
+  // SD card since the last visit. Only the Reader section shows the row.
   std::vector<DictionaryEntry> dictionaries;
-  DictionaryRegistry::discover(dictionaries);
+  if (section == SettingsSection::Reader) DictionaryRegistry::discover(dictionaries);
 
   auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
@@ -175,7 +174,9 @@ void SettingsActivity::rebuildSettings() {
     if (section == SettingsSection::Controls && setting.valuePtr == &CrossPointSettings::longPressButtonBehavior) {
       setting.nameId = StrId::STR_PAGE_TURN_LONG_PRESS;
     }
+    const bool isUiTheme = setting.nameId == StrId::STR_UI_THEME;
     settings.push_back(std::move(setting));
+    if (isUiTheme) addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
   }
 
   if (section == SettingsSection::Controls && controlsGroup == ControlsGroup::Front) {
@@ -194,6 +195,8 @@ void SettingsActivity::rebuildSettings() {
   addAction(SettingsSection::Reader, StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar);
   addAction(SettingsSection::Reader, StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache);
 
+  addAction(SettingsSection::Library, StrId::STR_LIBRARY_REBUILD, SettingAction::RefreshLibrary);
+
   addAction(SettingsSection::Network, StrId::STR_WIFI_NETWORKS, SettingAction::Network);
   if (bleturner::status().compiledIn) {
     addAction(SettingsSection::Network, StrId::STR_BT_PAGE_TURNER, SettingAction::Bluetooth);
@@ -210,6 +213,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+  addAction(SettingsSection::General, StrId::STR_DISPLAY_REFRESH, SettingAction::DisplayRefresh);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -452,6 +456,36 @@ void SettingsActivity::toggleSelectedSetting() {
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::RefreshLibrary: {
+        // Blocking, like the Library screen's own rebuild: the walk needs the
+        // card to itself, so the render task stays locked out.
+        RenderLock lock;
+        GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+        library::BuildStats stats;
+        const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+        if (!ok) LOG_ERR("SET", "library index build failed");
+        GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
+        delay(1000);
+        requestUpdate();
+        break;
+      }
+      case SettingAction::DisplayRefresh: {
+        // Alternate full black and white refreshes to clear image retention.
+        // Back stops after the next white pass, so the screen always ends white.
+        constexpr int kCycles = 10;
+        RenderLock lock;
+        for (int cycle = 0; cycle < kCycles; ++cycle) {
+          renderer.clearScreen(0x00);
+          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+          renderer.clearScreen(0xFF);
+          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+          resetTaskWatchdogIfSubscribed();
+          mappedInput.update(true);
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) break;
+        }
+        requestUpdate();
+        break;
+      }
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -483,6 +517,45 @@ void SettingsActivity::toggleSelectedSetting() {
                                  rebuildSettings();
                                });
         break;
+      case SettingAction::UiFont: {
+        const auto& families = sdFontSystem.registry().getFamilies();
+        std::vector<std::string> options;
+        options.reserve(families.size() + 1);
+        options.emplace_back(tr(STR_DEFAULT_VALUE));
+        int current = 0;
+        for (const auto& fam : families) {
+          if (!SdCardFontSystem::supportsUiFont(fam)) continue;
+          if (fam.name == sdFontSystem.activeUiFontName()) current = static_cast<int>(options.size());
+          options.push_back(fam.name);
+        }
+        optionPopup.show(StrId::STR_UI_FONT, std::move(options), current, [this](const int idx) {
+          const char* name = idx == 0 ? "" : optionPopup.optionLabel(idx);
+          bool applied;
+          {
+            RenderLock lock;
+            if (strcmp(name, sdFontSystem.activeUiFontName()) == 0 && strcmp(name, SETTINGS.uiFontFamilyName) == 0)
+              return;
+            char previous[sizeof(SETTINGS.uiFontFamilyName)];
+            snprintf(previous, sizeof(previous), "%s", sdFontSystem.activeUiFontName());
+            applied = sdFontSystem.applyUiFont(renderer, name);
+            if (!applied && previous[0] != '\0') sdFontSystem.applyUiFont(renderer, previous);
+            resetUi();
+            if (!applied) {
+              const char* const errorOptions[] = {tr(STR_OK_BUTTON)};
+              optionPopup.showMessage("", tr(STR_UI_FONT_LOAD_FAILED), errorOptions, 1, 0, nullptr);
+              redrawFontPopupBackground = true;
+            }
+          }
+          if (!applied) return;
+          if (strcmp(name, SETTINGS.uiFontFamilyName) != 0) {
+            snprintf(SETTINGS.uiFontFamilyName, sizeof(SETTINGS.uiFontFamilyName), "%s", name);
+            SETTINGS.saveToFile();
+          }
+          rebuildSettings();
+        });
+        requestUpdate();
+        return;
+      }
       case SettingAction::Plugins: {
         static constexpr StrId OPTIONS[] = {StrId::STR_ENABLED, StrId::STR_DISABLED, StrId::STR_CANCEL};
         optionPopup.show(StrId::STR_PLUGINS, OPTIONS, 3, SETTINGS.pluginsEnabled ? 0 : 1, [this](const int idx) {
@@ -569,6 +642,10 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
+  if (setting.action == SettingAction::UiFont) {
+    const char* name = sdFontSystem.activeUiFontName();
+    return name[0] == '\0' ? tr(STR_DEFAULT_VALUE) : name;
+  }
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
@@ -655,6 +732,11 @@ void SettingsActivity::drawFooter() {
 }
 
 void SettingsActivity::render(RenderLock&& lock) {
+  if (std::exchange(redrawFontPopupBackground, false) && optionPopup.isActive()) {
+    renderer.clearScreen();
+    drawChrome();
+    renderUi();
+  }
   if (optionPopup.processRender(renderer, mappedInput)) return;
   UiListActivity::render(std::move(lock));
 }

@@ -2,12 +2,16 @@
 
 #include <ArduinoJson.h>
 #include <BlePageTurner.h>
+#include <BoardConfig.h>
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
+#include <SdCardFontRegistry.h>
+#include <VectorFontSupport.h>
 
 #include <cstdint>
 
 #include "util/HomeButtonInput.h"
+#include "util/PowerButtonInput.h"
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
@@ -310,8 +314,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
-  // X4 Pro double click; Ignore disables the single-click delay.
-  uint8_t doublePwrBtn = PWR_FRONTLIGHT;
+  // Power double click (see hasPowerDoubleClick()); Ignore disables the
+  // single-click delay.
+  uint8_t doublePwrBtn = defaultDoublePwrBtn();
   uint8_t homeButtonTapAction = static_cast<uint8_t>(HomeButtonAction::Home);
   uint8_t homeButtonDoubleTapAction = static_cast<uint8_t>(HomeButtonAction::ToggleFrontlight);
   uint8_t homeButtonLongPressAction = static_cast<uint8_t>(HomeButtonAction::ReaderMenu);
@@ -367,17 +372,31 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // The fading fix compensates the X4/X3 grayscale waveforms; other boards never get it.
+  static bool fadingFixSupported() {
+    const auto board = BoardConfig::ACTIVE.board;
+    return board == BoardConfig::Board::XteinkX4 || board == BoardConfig::Board::XteinkX3 ||
+           board == BoardConfig::Board::XteinkX3Uc8279;
+  }
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // Book-embedded @font-face fonts (PublisherFonts); PSRAM boards only.
+  uint8_t publisherFonts = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   uint8_t readerMenuStyle = READER_MENU_LIST;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
-  // Dictionary folder name under /dictionaries (empty = no dictionary)
-  char dictionaryName[32] = "";
+  // SD card font family to use for the whole UI (menus, home);
+  // empty = the built-in UI font. Bound to the UI font slots at boot and on
+  // change. Independent of the reader font above.
+  char uiFontFamilyName[SdCardFontRegistry::FAMILY_NAME_CAPACITY] = "";
+  // Dictionary folder name under /dictionaries (empty = no dictionary).
+  // Sized to DictionaryRegistry::MAX_NAME_BYTES (checked in SettingsList.h):
+  // a UTF-8 folder name can take 2 or 3 bytes per character.
+  char dictionaryName[128] = "";
   // Win98 desktop: which icons show, and the wallpaper BMP path (empty = none)
   uint8_t desktopIcons = DESKTOP_ICONS_ALL;
   // Per-app desktop icons when desktopIcons is All; the Start menu lists every app.
@@ -404,6 +423,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Show the title and author read from inside each book rather than its
   // filename. Users can disable this to make index rebuilds skip EPUB parsing.
   uint8_t libraryUseMetadata = 1;
+  // Library Recent tab lists only opened books, without the by-arrival list below them (0 = off, 1 = on)
+  uint8_t libraryRecentOpenedOnly = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
@@ -463,8 +484,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
+  // Every board offers a power double-click action except those whose power
+  // button is also Confirm.
+  static bool hasPowerDoubleClick() {
+    return BoardConfig::ACTIVE.inputStyle != BoardConfig::InputStyle::DigitalConfirmPowerHold;
+  }
+  // Frontlight toggle where it shipped enabled; off elsewhere, so a single
+  // click has no double-click wait unless the user picks an action.
+  static uint8_t defaultDoublePwrBtn() {
+    return (BoardConfig::isX4Pro() || BoardConfig::isEegoA4()) ? PWR_FRONTLIGHT : IGNORE;
+  }
   uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
+    if (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) return 10;
+    // EEGO A4: the hold must last 400 ms longer.
+    return PowerButtonInput::LONG_PRESS_MS + (BoardConfig::isEegoA4() ? 400 : 0);
   }
   int getReaderFontId() const;
 

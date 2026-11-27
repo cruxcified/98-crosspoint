@@ -33,8 +33,8 @@ incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
-saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
-saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
+saved_hit = method("int EpubReaderActivity::clippingAtPoint", "bool EpubReaderActivity::drawClippingHighlights", reader_source)
+saved_draw = method("bool EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
 
 # Compile production extraction, export, and redraws with bounded UI/rendering stubs.
 harness = r"""
@@ -63,6 +63,7 @@ struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4, STRIKETHROUGH = 8 };
 constexpr int TAG_PageLine = 1, TAG_PageImage = 2;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
+struct LaidOutText { const char* text; const char* display; };
 struct Renderer;
 struct Block {
   struct Style { bool isRtl = false; int8_t characterSpacing = 0; } style;
@@ -92,6 +93,7 @@ struct Block {
     return word;
   }
   uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
+  LaidOutText laidOutWord(uint16_t i) const { return {wordText(i), nullptr}; }
   EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
   int wordXpos(uint16_t i) const { return positions.empty() ? 0 : positions[i]; }
   Range wordSourceRange(uint16_t i) const {
@@ -126,7 +128,8 @@ struct FontCache {
   Scope createPrewarmScope() { return Scope(*this); }
 };
 struct Renderer {
-  enum RenderMode { BW };
+  using LaidOutText = ::LaidOutText;
+  enum RenderMode { BW, GRAYSCALE_MSB };
   enum class DitherMode { Replace, PreserveInk };
   struct Draw { int x, width, tracking; };
   mutable std::vector<Draw> draws;
@@ -171,6 +174,9 @@ struct Renderer {
     }
     const int length = std::char_traits<char>::length(text);
     return length * 8 + (length - 1) * tracking;
+  }
+  int getTextAdvanceX(int font, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0) const {
+    return getTextAdvanceX(font, text.display ? text.display : text.text, style, tracking);
   }
   void ensureSdCardFontReady(int, const char*, uint8_t) {}
   void ensureSdCardFontReady(int, const char* const* segments, const size_t* lengths, size_t count,
@@ -329,7 +335,7 @@ struct EpubReaderActivity {
   Section* section = &sectionData;
   int currentSpineIndex = 0, buildViewportWidth = 480, buildViewportHeight = 800;
   int clippingAtPoint(const Page&, int, int) const;
-  void drawClippingHighlights(const Page&, int, int, int) const;
+  bool drawClippingHighlights(const Page&, int, int, int) const;
 };
 """ + word_font + word_rect + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
@@ -567,12 +573,17 @@ int main() {
     savedClippings.clipping.startOffset = 0;
     savedClippings.clipping.endOffset = 3;
     activity.renderer.fills.clear();
-    reader.drawClippingHighlights(*activity.pages[0], 0, 0, 0);
+    assert(reader.drawClippingHighlights(*activity.pages[0], 0, 0, 0));
     assert(activity.renderer.fills.size() == 1);
     const int width = activity.words[0].width;
     assert(activity.renderer.fills[0].width == width);
     assert(reader.clippingAtPoint(*activity.pages[0], width - 1, 8) == 0);
     assert(reader.clippingAtPoint(*activity.pages[0], width, 8) == -1);
+    savedClippings.clipping.startOffset = 10;
+    savedClippings.clipping.endOffset = 13;
+    activity.renderer.fills.clear();
+    assert(!reader.drawClippingHighlights(*activity.pages[0], 0, 0, 0));
+    assert(activity.renderer.fills.empty());
   }
   for (const auto& logical : {std::vector<std::string>{"אחד", "alpha", "beta", "שני"},
                               std::vector<std::string>{"واحد", "alpha", "beta", "اثنان"}}) {

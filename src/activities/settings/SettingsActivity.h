@@ -1,5 +1,6 @@
 #pragma once
 #include <I18n.h>
+#include <VectorFontSupport.h>
 
 #include <functional>
 #include <span>
@@ -23,6 +24,8 @@ enum class SettingAction {
   Network,
   Bluetooth,
   ClearCache,
+  RefreshLibrary,
+  DisplayRefresh,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
@@ -30,6 +33,7 @@ enum class SettingAction {
   TextSettings,
   Plugins,
   KeyboardLayouts,
+  UiFont,
   HomeButton,
   ControlsPower,
   ControlsFront,
@@ -198,6 +202,7 @@ class SettingsActivity final : public UiListActivity {
   bool quickResumeTimeoutAutoEnabled = false;
 
   OptionPopup optionPopup;
+  bool redrawFontPopupBackground = false;
 
   // Row structure (label/actionValue), rebuilt only when the setting list
   // changes; rowValues_ holds the live value text, refreshed every

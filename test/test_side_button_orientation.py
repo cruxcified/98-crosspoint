@@ -18,7 +18,7 @@ panel = (ROOT / "src/activities/util/FrontlightPanelActivity.cpp").read_text()
 preview_setup = panel[panel.index("    static constexpr fui::Rotation rotations[]"):panel.index("    const fui::Rect row = screen.takeTop(kQuickControlSize)")]
 preview_draw = panel[panel.index("      screen.target().bitmap(iconRect"):panel.index("      // A tile whose function")]
 reader = (ROOT / "src/activities/reader/ReaderUtils.h").read_text()
-detect_turn = reader[reader.index("struct PageTurnResult"):reader.index("struct TouchPageTurn")]
+detect_turn = reader[reader.index("struct FrontPageTurnButtons"):reader.index("struct TouchPageTurn")]
 
 stub = r"""
 #pragma once
@@ -31,6 +31,7 @@ struct HalGPIO {
   bool wasPressed(uint8_t b) const { return pressed == b; }
   bool wasReleased(uint8_t b) const { return pressed == b; }
   bool isPressed(uint8_t b) const { return pressed == b; }
+  bool isPowerButtonPhysicallyPressed() const { return isPressed(BTN_POWER); }
 };
 """
 harness = r"""
@@ -39,6 +40,10 @@ harness = r"""
 #include <initializer_list>
 #include <FreeInkUICore.h>
 namespace fui = freeink::ui;
+namespace BoardConfig {
+  bool onePage = false;
+  bool isOnePage() { return onePage; }
+}
 #define private public
 #include "MappedInputManager.h"
 #undef private
@@ -153,6 +158,13 @@ int main() {
           const auto labels = input.mapLabels("back", "confirm", previous, next);
           assert(labels.btn3 == (swapNav ? next : previous));
           assert(labels.btn4 == (swapNav ? previous : next));
+          BoardConfig::onePage = true;
+          const auto onePageLabels = input.mapLabels("back", "confirm", previous, next);
+          assert(onePageLabels.btn1 == labels.btn1);
+          assert(onePageLabels.btn2 == labels.btn3);
+          assert(onePageLabels.btn3 == labels.btn4);
+          assert(onePageLabels.btn4 == labels.btn2);
+          BoardConfig::onePage = false;
           for (uint8_t layout = 0; layout < 5; ++layout) {
             SETTINGS.sideButtonLayout = layout;
             for (int physical = 0; physical < 7; ++physical) {

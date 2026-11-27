@@ -177,8 +177,23 @@ int LibraryListActivity::selectedEntry() const {
 // list the reader narrowed down on purpose, and the ascending toggle asks for
 // oldest-first, which pinned fresh reads would contradict.
 int LibraryListActivity::pinnedCount() const {
+  if (openedOnly()) return pinnedTotal;
   if (activeTabIndex != RECENT_TAB || !query.empty() || !isDescending(sortOrder)) return 0;
   return pinnedTotal;
+}
+
+// With the setting on, the unfiltered Recent tab is the store alone, in either
+// direction. Search still covers the whole index.
+bool LibraryListActivity::openedOnly() const {
+  return SETTINGS.libraryRecentOpenedOnly != 0 && activeTabIndex == RECENT_TAB && query.empty();
+}
+
+// Store book behind a pinned entry; the ascending toggle reads the store backwards.
+const RecentBook* LibraryListActivity::storeBook(const int entry) const {
+  const auto& books = RECENT_BOOKS.getBooks();
+  const int count = std::min(static_cast<int>(books.size()), static_cast<int>(pinnedTotal));
+  if (entry < 0 || entry >= count) return nullptr;
+  return &books[static_cast<size_t>(isDescending(sortOrder) ? entry : count - 1 - entry)];
 }
 
 void LibraryListActivity::resolvePinned() {
@@ -223,9 +238,9 @@ void LibraryListActivity::refreshOverlap() {
 void LibraryListActivity::openSelectedBook() {
   std::string path;
   if (selectedEntry() < pinnedCount()) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (selectedEntry() >= static_cast<int>(books.size())) return;
-    path = books[static_cast<size_t>(selectedEntry())].path;
+    const RecentBook* book = storeBook(selectedEntry());
+    if (!book) return;
+    path = book->path;
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedEntry())));
@@ -288,10 +303,10 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   std::string title;
   const bool isStoreRow = entry < pinnedCount();
   if (isStoreRow) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (entry >= static_cast<int>(books.size())) return;
-    path = books[static_cast<size_t>(entry)].path;
-    title = books[static_cast<size_t>(entry)].title;
+    const RecentBook* book = storeBook(entry);
+    if (!book) return;
+    path = book->path;
+    title = book->title;
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -495,7 +510,7 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       if (!result.isCancelled) {
         LOG_DBG("LIB", "deleting %s", path.c_str());
         if (!removeBookFile(path)) LOG_ERR("LIB", "cannot delete %s", path.c_str());
-        if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
+        RECENT_BOOKS.removeByPath(path);  // saves on removal
         GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
         rebuildIndex();
       }
@@ -593,6 +608,7 @@ fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
 int LibraryListActivity::bookRowCount() const {
   if (openShelf >= 0) return shelfEnd(openShelf) - groupStarts[openShelf];
   if (filterActive()) return static_cast<int>(filteredCount);
+  if (openedOnly()) return pinnedTotal;
   // Pinned books already in the index are skipped below the pins, not doubled;
   // pinned books the index missed still show, so the difference stays split.
   const int pinned = pinnedCount();
@@ -983,12 +999,11 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
   author.clear();
   if (bookPath) bookPath->clear();
   if (entry < pinnedCount()) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (entry < 0 || entry >= static_cast<int>(books.size())) return false;
-    const auto& book = books[static_cast<size_t>(entry)];
-    title = book.title;
-    author = book.author;
-    if (bookPath) *bookPath = book.path;
+    const RecentBook* book = storeBook(entry);
+    if (!book) return false;
+    title = book->title;
+    author = book->author;
+    if (bookPath) *bookPath = book->path;
     return true;
   }
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -1455,6 +1470,8 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
     const char* message = tr(STR_LIBRARY_NO_RESULTS);
     if (filterFailed) {
       message = tr(STR_LIBRARY_SEARCH_UNAVAILABLE);
+    } else if (openedOnly() && index.bookCount() > 0) {
+      message = tr(STR_LIBRARY_NO_OPENED);
     } else if (query.empty()) {
       message = tr(STR_LIBRARY_EMPTY);
     }

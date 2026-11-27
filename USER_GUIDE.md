@@ -78,10 +78,10 @@ The Control Center is available on all touch devices. Devices with a frontlight 
 
 * **Open the panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). You can also tap the status bar on Home, Browse Files, or Settings. On devices with a frontlight, drag the brightness slider (and the warmth slider, where available) to adjust the light live, or tap the sun icon to turn it on or off.
 * **Quick controls:** The panel has one row of icons: moon for night mode, circular arrows to refresh the screen, an underlined **T** to cycle reading direction, and the Settings Controls pointer to toggle reader touch controls. On builds with Bluetooth support, a fifth button enables or disables the Bluetooth page turner. Its crossed-out icon means disabled. The **T** rotates with the selected direction. A filled toggle means enabled; an outlined toggle means disabled. Refresh and direction always have outlines. Turning reader touch controls off leaves the panel usable. Bluetooth reconnection follows the normal rules after you close the panel; enabling it does not pair a new remote.
-* **Quick toggle (X4 Pro only):** Double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
+* **Quick toggle:** On devices with a frontlight, set **Settings → Controls → Power button → Double click** to **Frontlight** (the default on X4 Pro and EEGO A4), then double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
 
 > [!NOTE]
-> Frontlight brightness and warmth are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to adjust them. On the X4 Pro, the on/off state can also be toggled with the Power-button double-click above.
+> Frontlight brightness and warmth are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to adjust them. The on/off state can also be toggled with the Power-button double-click above.
 
 If the frontlight doesn't come back on after the device wakes from sleep, check **Restore Light on Wake** in **[Display Settings](#361-display)** (on by default). Turning it off is intentional if you'd rather have the light stay off on wake and switch it on yourself each time — but it's easy to forget you changed it.
 
@@ -151,11 +151,13 @@ The Library indexes up to 4,096 supported books on the SD card, so you can find 
 
 Its five tabs provide different views. An arrow beside a tab shows the sort direction:
 
-- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. Hold a book for options, including removing it from the recent list. **Find Cover** connects to your last saved Wi-Fi network on a CoverFinder connecting page (if that fails, the Wi-Fi list opens), searches Open Library (openlibrary.org) with the book's title and author, and shows up to six covers to pick from. The chosen cover replaces the book's own cover in the library, on Home and on the sleep screen, and is kept when you delete the book cache. **Use Book's Own Cover** undoes it. Find Cover works for EPUB, TXT and Markdown books. Leaving Find Cover restarts the device into My Books to free the Wi-Fi memory.
+- **Recent** lists the books you opened most recently first, then every other book by when it arrived on the card. With **Hide New Files in Recent** turned on in **Settings → Library**, the tab lists only the books you opened; up shows the least recently opened first (search still covers every book). Hold a book for options, including removing it from the recent list. **Find Cover** connects to your last saved Wi-Fi network on a CoverFinder connecting page (if that fails, the Wi-Fi list opens), searches Open Library (openlibrary.org) with the book's title and author, and shows up to six covers to pick from. The chosen cover replaces the book's own cover in the library, on Home and on the sleep screen, and is kept when you delete the book cache. **Use Book's Own Cover** undoes it. Find Cover works for EPUB, TXT and Markdown books. Leaving Find Cover restarts the device into My Books to free the Wi-Fi memory.
 - **Title** sorts books by title. Up sorts A-Z and down sorts Z-A. The group list (see below) jumps by first letter; titles beginning with numbers or punctuation appear under `#`, and letters from non-English scripts, including Hebrew, have their own groups.
 - **Author** sorts books by author. Up sorts A-Z and down sorts Z-A. When Titles Under Covers is on, the covers are labeled with the author here, and the group list jumps by author.
 - **New** lists books by when they arrived on the card (file date), without the recently opened books on top. Down shows the newest first.
 - **Shelf** turns each folder on the card into a shelf. It shows the list of shelves with their book counts; open one to see its books (A-Z), and press Back to return to the shelves. Books at the top of the card are under **No shelf**. Folders with the same name in different places are separate shelves. Up to 64 folders get their own shelf; books in further folders are under **No shelf**. A search on this tab is a plain title search.
+
+`My Clippings.txt` and `crash_report.txt` are not listed in the Library. They remain available in the file browser.
 
 On a button-only device:
 
@@ -164,10 +166,11 @@ On a button-only device:
 - Press **Back** from the books to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the books.
 - While the tabs are focused, hold **Confirm** to open Search.
 - In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
+- While a search is active in the Title or Author views, hold **Confirm** on a book to delete it. Press **Back** to clear the search.
 
 On a touch device, tap tabs, books, shelves, and the Search icon directly. Tap an active tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent or New view for options. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. Long-press a book inside a shelf to delete it.
 
-The index is created automatically the first time the Library is opened. To pick up later file changes or updated metadata, use **Settings → System → Rebuild library index**. The **Use book metadata** setting controls whether the index reads titles and authors stored inside books.
+The index is created automatically the first time the Library is opened, and it is rebuilt after books are added through file transfer. To pick up other file changes or updated metadata, choose **Refresh Library** from a Recent book's options, or tap the refresh icon on a touch device. **Settings → Library → Refresh Library** does the same from any device, including when the Library shows no books. The **Use Book Metadata** setting controls whether the index reads titles and authors stored inside books.
 
 ### 3.5 File Transfer Screen
 
@@ -230,7 +233,7 @@ Books cannot be removed from your device through Calibre. Use the web interface 
 
 ### 3.6 Settings
 
-Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, file-extension visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, Move Finished Books to Read Folder, and Titles Under Covers. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
+Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, file-extension visibility, Clock (where available), firmware updates, Display Refresh, and About. Library contains Use Book Metadata, Hide New Files in Recent, Clear Read Books from Recent List, Move Finished Books to Read Folder, Titles Under Covers, and Refresh Library. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
 
 #### 3.6.1 Display
 
@@ -280,15 +283,17 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Classic" - The original Crosspoint theme
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
   - "Lyra Extended" - Lyra, but showed 3 books instead of 1 on the old Home screen
-  
-  The theme styles menus and lists. It does not change the Windows 98 **[Home Screen](#31-home-screen)**.
   - "RoundedRaff" - A rounded theme with additional visual styling
+
+  The theme styles menus and lists. It does not change the Windows 98 **[Home Screen](#31-home-screen)**.
 
 - **Desktop Icons**: Which icons the Windows 98 desktop shows: "All" (apps and up to three recent books), "Books Only", or "None".
 
 - **Show My Computer**, **Show My Books**, **Show Notepad**, **Show Network**, **Show Plugins**: Hide single app icons from the desktop. They apply only when Desktop Icons is "All". Settings, CoverFinder and recent books always show, and the Start menu still lists every app. **Show Plugins** also hides the OPDS Browser icon when it takes the Plugins place.
 
 - **Wallpaper**: "None" (the grey desktop) or a BMP from the `/sleep` folder. The picture is scaled to cover the desktop and dithered to black and white. Only `/sleep` is listed, not `/.sleep`. This option needs PSRAM, so it appears on the X4 Pro but not on the X3 or X4.
+
+- **UI Font**: Choose the font used for menus, library titles, and other interface text. The Windows 98 desktop keeps its own font. See [Menu Fonts](docs/sd-card-fonts.md#menu-fonts) for supported files and sizes.
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   
@@ -311,6 +316,11 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
+
+- **Publisher Fonts**: On devices with external RAM, open **Text Settings → Style** to choose how fonts embedded in an EPUB are used. **Embedded Style** must be on, and the book must contain supported font files.
+  - **Off**: Use your selected reading font instead of the book's embedded fonts.
+  - **Ignore Body Font** (default): Use your selected reading font instead of the publisher's main body font. Allow other embedded fonts from the book. Text using the same font family as the book's body also uses your selected reading font.
+  - **All Text**: Use the book's embedded fonts wherever they are specified and supported, with your reading font as the fallback.
 
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF". Korean text wraps only at spaces when "OFF"; when "ON", a Korean word may also wrap at the end of a line between syllables or where it meets digits, Latin letters, or brackets (no hyphen is drawn).
 
@@ -379,6 +389,8 @@ Side buttons, and Taps and gestures where supported by the device. See the
 
 #### 3.6.4 System
 
+**About** shows hardware and firmware information. On EEGO Reader A4, it also shows the factory UID, matching the stock firmware. If the UID cannot be read, its value shows **Error.**
+
 - **Time to Sleep** (**Settings → Display**): Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
@@ -393,7 +405,9 @@ Side buttons, and Taps and gestures where supported by the device. See the
 
 - **Use book metadata**: Read the title and author stored inside each book when the Library index is rebuilt. When disabled or unavailable, the Library uses the filename.
 
-- **Rebuild library index**: Rescan the SD card for books while preserving the arrival history of books already in the index.
+- **Refresh Library** (**Settings → Library**): Rescan the SD card for books while preserving the arrival history of books already in the index.
+
+- **Display Refresh**: Flash the whole screen black and white 10 times to clear image retention. It takes a while; hold **Back** to stop early. The screen always ends white.
 
 - **Check for updates**: Check for firmware updates over Wi-Fi. This fork (CrossPoint98) installs the latest X4 Pro release from `cruxcified/98-crosspoint`, not stock CrossPoint. Each push to `develop` publishes a new, untested build. Other devices report no update. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card. Neither option is available on the BOOX Picco, which is updated over USB.
 
@@ -597,6 +611,10 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Front buttons -> Menu long press** to **CrossPoint Sync** and hold Confirm to launch sync directly.
 
 - **Sync Clippings** is off by default. Enable it only for a compatible CrossPoint Sync server; manual **Sync Progress** then uploads and downloads this book’s clippings too. Leave it off for ordinary KOSync servers.
+- With the server type set to **CrossPoint** or **Other**, manual **Sync Progress** also syncs this book's bookmarks and uploads your reading sessions, if the server offers these features. If it does not, or this step fails, progress sync still continues.
+  - **Bookmarks:** each bookmark's position, text excerpt, and name are uploaded. Bookmarks added, renamed, or deleted on one device appear on your other devices after they sync.
+  - **Reading sessions:** CrossPoint records each reading session in `/.crosspoint/reading_sessions.jsonl` on the SD card, even before sync is set up, and never trims that file. Each line also stores the book's path and title, which are not uploaded. A sync uploads sessions the server does not have yet, up to 200 per sync, so a long history is uploaded over several syncs. Each session carries the book id, start time, active reading time, time zone offset, and an id that includes this device's hardware address.
+- **Sync On Sleep** is off by default. When it is on and you put the device to sleep from an EPUB, CrossPoint joins a saved Wi-Fi network that is in range, preferring the last one you used (if the battery is at least 20%), and syncs that book after the sleep screen appears: bookmarks, reading sessions, clippings if enabled, and your position. Your position is uploaded only when the server is not further ahead; a further position on the server waits for a manual **Sync Progress**. Going to sleep takes a few seconds longer and uses more battery. If the network is not reachable, the device just sleeps.
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
@@ -732,7 +750,7 @@ CrossPoint renders text using the following Unicode character blocks, enabling s
 * **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
 * **Vietnamese:** Supported via extended Latin glyph coverage in the built-in reader fonts.
 
-The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
+The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Indic scripts (Hindi, Bengali, Tamil, ...), Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Indic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card). Devanagari, Bengali, Gurmukhi, Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam and Sinhala text is fully shaped (conjuncts, reph and vowel-sign placement) with the matching `NotoSans…` or `NotoSerif…` download fonts; see [docs/sd-card-fonts.md](docs/sd-card-fonts.md#indic-scripts).
 
 ---
 
