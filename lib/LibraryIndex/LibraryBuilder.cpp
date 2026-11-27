@@ -207,17 +207,21 @@ std::string_view normalizeLibraryRootAliases(std::string_view path) {
   return path;
 }
 
+// ASCII case-insensitive match against an already lower-case name (FAT names
+// are case-insensitive).
+bool equalsLowerAscii(const std::string_view name, const std::string_view lower) {
+  return std::equal(name.begin(), name.end(), lower.begin(), lower.end(), [](const char a, const char b) {
+    return (a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a) == b;
+  });
+}
+
 bool isLibrarySkipped(const std::string_view path, bool isNormalizedPath = false) {
   // Library-only exclusions: these directories must remain accessible in file managers.
   constexpr std::string_view ROOTS[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
   const std::string_view relativePath = isNormalizedPath ? path : normalizeLibraryRootAliases(path);
   const std::string_view name = relativePath.substr(0, relativePath.find('/'));
   for (const auto root : ROOTS) {
-    if (std::equal(name.begin(), name.end(), root.begin(), root.end(), [](const char a, const char b) {
-          return (a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a) == b;
-        })) {
-      return true;
-    }
+    if (equalsLowerAscii(name, root)) return true;
   }
   return false;
 }
@@ -465,19 +469,9 @@ struct DedupFrame {
   ~DedupFrame() { state.activeDedupCount = base; }
 };
 
-void walk(WalkState& st, const std::string& path, const int depth) {
-  if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
-  if (isLibrarySkipped(path)) return;
-
+void walk(WalkState& st, HalFile& dir, const std::string& path, const int depth) {
   const uint16_t dedupBase = st.activeDedupCount;
   const DedupFrame dedupFrame{st, dedupBase};
-
-  HalFile dir = Storage.open(path.c_str());
-  if (!dir || !dir.isDirectory()) {
-    if (dir) dir.close();
-    return;
-  }
-  dir.rewindDirectory();
 
   // Identities already staged from THIS directory. A damaged FAT can enumerate
   // the same entry twice; the second one would be a phantom book the user cannot
@@ -509,24 +503,24 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     const bool isDir = entry.isDirectory();
     const uint32_t size = isDir ? 0 : static_cast<uint32_t>(entry.fileSize());
     const uint32_t modificationTime = isDir ? 0 : entry.modificationTime();
-    entry.close();
+    if (!isDir) entry.close();
 
     if (st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
     const std::string name(st.nameBuf);
 
     if (isDir) {
-      const size_t resumePosition = dir.position();
-      dir.close();
-      walk(st, joinLibraryPath(path, name), depth + 1);
-      if (st.failed || st.books >= CLIX_MAX_RECORDS) return;
-
-      dir = Storage.open(path.c_str());
-      if (!dir || !dir.isDirectory() || !dir.seekSet(resumePosition)) {
-        if (dir) dir.close();
-        LOG_ERR("LIBIDX", "cannot resume directory %s at %u", path.c_str(), static_cast<unsigned>(resumePosition));
-        st.failed = true;
-        return;
+      if (depth >= LIBRARY_MAX_DEPTH) continue;
+      const std::string childPath = joinLibraryPath(path, name);
+      if (isLibrarySkipped(childPath)) continue;
+      // SdFat trims these characters during path lookup. Scan the directory
+      // that the stored book paths will open.
+      if (name.front() == ' ' || name.back() == ' ' || name.back() == '.') {
+        entry.close();
+        entry = Storage.open(childPath.c_str());
+        if (!entry || !entry.isDirectory()) continue;
       }
+      walk(st, entry, childPath, depth + 1);
+      if (st.failed || st.books >= CLIX_MAX_RECORDS) break;
       continue;
     }
     if (!isLibraryBookFile(name)) continue;
@@ -585,7 +579,6 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     }
     if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name), modificationTime)) break;
   }
-  dir.close();
 }
 
 // Shared by the offset and write passes so the name-blob layout has one source of
@@ -996,6 +989,12 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     return readStageAt(static_cast<uint64_t>(stagingIndex) * STAGE_STRIDE, &dest, STAGE_STRIDE);
   };
 
+  const auto canonicalEntry = [&](const uint16_t titlePosition) -> const StagedEntry* {
+    const uint16_t from = canonicalFrom ? canonicalFrom[titlePosition] : titlePosition;
+    if (from == titlePosition) return &entry;
+    return fetch(order[from], canonical) ? &canonical : nullptr;
+  };
+
   uint32_t nameCursor = 0;
   for (uint16_t i = 0; i < n; i++) {
     serviceBuilder(serviceUnits);
@@ -1004,9 +1003,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     // The blob holds the path hash, basename, chosen author spelling, title, and
     // source author spelling used by later rebuilds.
     // Keeping them adjacent means no second offset has to live in the record.
-    const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
-    if (!fetch(order[from], canonical)) break;
-    nameCursor += blobBytesFor(entry, canonical);
+    const auto* chosen = canonicalEntry(i);
+    if (!chosen) break;
+    nameCursor += blobBytesFor(entry, *chosen);
     if (resolvedFirstSeen) entry.record.firstSeen = resolvedFirstSeen[order[i]];
     put(&entry.record, sizeof(ClixRecord));
   }
@@ -1031,15 +1030,15 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     put(&entry.pathHash, sizeof(entry.pathHash));
     put(entry.name, entry.record.nameLen);
 
-    const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
-    if (!fetch(order[from], canonical)) break;
-    put(&canonical.authorLen, 1);
-    if (canonical.authorLen > 0) put(canonical.author, canonical.authorLen);
+    const auto* chosen = canonicalEntry(i);
+    if (!chosen) break;
+    put(&chosen->authorLen, 1);
+    if (chosen->authorLen > 0) put(chosen->author, chosen->authorLen);
     put(&entry.titleLen, 1);
     if (entry.titleLen > 0) put(entry.title, entry.titleLen);
     put(&entry.authorLen, 1);
     if (entry.authorLen > 0) put(entry.author, entry.authorLen);
-    blobWritten += blobBytesFor(entry, canonical);
+    blobWritten += blobBytesFor(entry, *chosen);
   }
   header.nameLen = blobWritten;
   header.selfSize = header.nameStart + blobWritten;
@@ -1094,7 +1093,12 @@ bool isLibraryBookFile(const std::string_view path) {
     const size_t slash = relativePath.find('/', start);
     const std::string_view name = relativePath.substr(start, slash - start);
     if (name != "." && isHiddenOrSidecar(name)) return false;
-    if (slash == std::string_view::npos) break;
+    if (slash == std::string_view::npos) {
+      // Firmware-written text files are not books. They stay reachable from
+      // the file browser.
+      if (equalsLowerAscii(name, "my clippings.txt") || equalsLowerAscii(name, "crash_report.txt")) return false;
+      break;
+    }
     start = slash + 1;
   }
   return FsHelpers::checkFileExtension(path, ".epub") || FsHelpers::checkFileExtension(path, ".txt") ||
@@ -1216,7 +1220,10 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   {
     serialization::BufferedFileWriter stageOut(st.stage, LIBRARY_IO_BUFFER_SIZE);
     st.stageOut = &stageOut;
-    walk(st, rootPath, 0);
+    if (!isLibrarySkipped(rootPath)) {
+      HalFile root = Storage.open(rootPath);
+      if (root && root.isDirectory()) walk(st, root, rootPath, 0);
+    }
     st.stageOut = nullptr;
     stageFlushed = stageOut.flush();
   }
