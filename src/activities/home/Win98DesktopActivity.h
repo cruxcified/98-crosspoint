@@ -70,6 +70,7 @@ class Win98DesktopActivity final : public Activity {
   std::string wallpaperKey;  // empty: no wallpaper
   // Set in onEnter; render() clears it if the wallpaper fails to draw.
   bool hasWallpaper = false;
+  bool canPickWallpaper = false;  // wallpapers need PSRAM
 
   // Written by loop(), read by render().
   std::atomic<int> selected{0};
@@ -89,6 +90,8 @@ class Win98DesktopActivity final : public Activity {
   Box menuRow(int index) const;
   int taskbarTop() const;
 
+  // Not on an icon or the taskbar.
+  bool onDesktopBackground(int x, int y) const;
   void handleTap(int x, int y);
   void activate(Action action, int book = 0);
   void checkClock();

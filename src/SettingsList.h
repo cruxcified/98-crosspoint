@@ -168,8 +168,6 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 }
 
 inline constexpr char WALLPAPER_SETTING_KEY[] = "desktopWallpaper";
-// Enum indexes are uint8_t; keep the list short enough to scroll.
-inline constexpr size_t MAX_WALLPAPER_OPTIONS = 60;
 
 // Desktop wallpaper: "None" plus the BMPs in the sleep folder. The full path
 // persists in SETTINGS.desktopWallpaper (saved/loaded manually).
@@ -185,19 +183,19 @@ inline SettingInfo buildWallpaperSetting(std::vector<std::string> names) {
 
   // One list shared by the getter and setter.
   const auto shared = std::make_shared<const std::vector<std::string>>(std::move(names));
-  const auto pathOf = [](const std::string& name) { return std::string(win98::WALLPAPER_DIR) + "/" + name; };
-  s.valueGetter = [shared, pathOf]() -> uint8_t {
+  s.valueGetter = [shared]() -> uint8_t {
     for (size_t i = 0; i < shared->size(); i++) {
-      if (pathOf((*shared)[i]) == SETTINGS.desktopWallpaper) return static_cast<uint8_t>(i + 1);
+      if (win98::wallpaperPath((*shared)[i]) == SETTINGS.desktopWallpaper) return static_cast<uint8_t>(i + 1);
     }
     return 0;  // "None", also when the stored file is gone
   };
-  s.valueSetter = [shared, pathOf](uint8_t v) {
+  s.valueSetter = [shared](uint8_t v) {
     if (v == 0 || v > shared->size()) {
       SETTINGS.desktopWallpaper[0] = '\0';
       return;
     }
-    strncpy(SETTINGS.desktopWallpaper, pathOf((*shared)[v - 1]).c_str(), sizeof(SETTINGS.desktopWallpaper) - 1);
+    strncpy(SETTINGS.desktopWallpaper, win98::wallpaperPath((*shared)[v - 1]).c_str(),
+            sizeof(SETTINGS.desktopWallpaper) - 1);
     SETTINGS.desktopWallpaper[sizeof(SETTINGS.desktopWallpaper) - 1] = '\0';
   };
   return s;
@@ -412,7 +410,7 @@ void forEachSetting(const SdCardFontRegistry* registry, const std::vector<Dictio
     if (s.valuePtr == &CrossPointSettings::desktopIcons && wants(WALLPAPER_SETTING_KEY) &&
         win98::wallpaperSupported()) {
       SettingInfo wallpaper = buildWallpaperSetting(
-          win98::listWallpapers(MAX_WALLPAPER_OPTIONS, sizeof(CrossPointSettings::desktopWallpaper)));
+          win98::listWallpapers(win98::MAX_WALLPAPERS, sizeof(CrossPointSettings::desktopWallpaper)));
       visit(wallpaper);
     }
   };
